@@ -14,6 +14,9 @@
 #include "Application.h"
 #include "Logger.h"
 
+// 変更 レールエディターをインクルードしました
+#include "Editor/RailEditor.h"
+
 namespace{
 	// スカイボックスのテクスチャパス
 	const std::string kSkyboxTexture = "resource/Skybox/rostock_laage_airport_4k.dds";
@@ -43,6 +46,10 @@ void GameScene::Initialize(Obj3dCommon* object3dCommon,Input* input,SpriteCommon
 	skyboxCommon_->Initialize(object3dCommon_->GetDxCommon());
 	skybox_ = std::make_unique<Skybox>();
 	skybox_->Initialize(skyboxCommon_.get(),kSkyboxTexture);
+
+	// 変更 レールエディターの生成と初期化を追加しました
+	railEditor_ = std::make_unique<RailEditor>();
+	railEditor_->Initialize(object3dCommon_);
 }
 
 // シーンの終了処理
@@ -52,6 +59,9 @@ void GameScene::Finalize(){}
 void GameScene::Update(){
 	// スカイボックスの更新
 	if(skybox_) skybox_->Update(*CameraManager::GetInstance()->GetActiveCamera());
+
+	// 変更 レールエディターの更新を追加しました
+	if(railEditor_) railEditor_->Update();
 
 #ifdef USE_IMGUI
 	if(Camera* activeCamera = CameraManager::GetInstance()->GetActiveCamera()){
@@ -92,4 +102,7 @@ void GameScene::Update(){
 // シーンの描画処理
 void GameScene::Draw(){
 	object3dCommon_->Draw();
+
+	// 変更 レールエディターの描画を追加しました
+	if(railEditor_) railEditor_->Draw();
 }

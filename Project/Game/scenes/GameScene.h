@@ -14,6 +14,9 @@ class Skybox;
 class SkyboxCommon;
 class Application;
 
+// 変更 レールエディターの前方宣言を追加しました
+class RailEditor;
+
 class GameScene : public BaseScene{
 public:
 	GameScene();
@@ -38,4 +41,7 @@ private:
 	// スカイボックス
 	std::unique_ptr<SkyboxCommon> skyboxCommon_;
 	std::unique_ptr<Skybox> skybox_;
+
+	// 変更 レールエディターを追加しました
+	std::unique_ptr<RailEditor> railEditor_;
 };

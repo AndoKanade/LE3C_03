@@ -210,6 +210,7 @@
     <ClCompile Include="Engine\Manager\LevelManager.cpp">
       <Filter>ソース ファイル\Engine\Manager</Filter>
     </ClCompile>
+    <ClCompile Include="Game\Editor\RailEditor.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Engine\Base\D3DResourceLeakChecker.h">
@@ -332,6 +333,7 @@
     <ClInclude Include="Engine\Manager\LevelManager.h">
       <Filter>ヘッダー ファイル\Engine\Manager</Filter>
     </ClInclude>
+    <ClInclude Include="Game\Editor\RailEditor.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Engine\Graphics\Shaders\Obj3D\Object3d.hlsli">
