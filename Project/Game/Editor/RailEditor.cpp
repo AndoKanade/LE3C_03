@@ -4,20 +4,26 @@
 #include "Obj3D.h"
 #include "Obj3dCommon.h"
 #include "ModelManager.h"
+#include "CameraManager.h"
+#include "Camera.h"
 
 RailEditor::RailEditor() = default;
 RailEditor::~RailEditor() = default;
 
 // エディターの初期化処理 引数を受け取るように変更
 void RailEditor::Initialize(Obj3dCommon* objCommon){
+	objCommon_ = objCommon;
+
 	controlPoints_.push_back({{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}, 1.0f});
 
 	// 追加: モデルを事前にロード
 	ModelManager::GetInstance()->LoadModel("Sphere/sphere.obj");
 
-	pointObject_ = std::make_unique<Obj3D>();
-	pointObject_->Initialize(objCommon);
-	pointObject_->SetModel("Sphere/sphere.obj");
+	// 最初の制御点用のObj3Dも作っておく
+	auto initialObj = std::make_unique<Obj3D>();
+	initialObj->Initialize(objCommon_);
+	initialObj->SetModel("Sphere/sphere.obj");
+	pointObjects_.push_back(std::move(initialObj));
 }
 
 // エディターの更新処理
@@ -30,6 +36,12 @@ void RailEditor::Update(){
 	if(ImGui::Button("Add Control Point")){
 		// リストの最後に新しい制御点を追加
 		controlPoints_.push_back({{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}, 1.0f});
+
+		// 追加した制御点専用のObj3Dも一緒に作る
+		auto newObj = std::make_unique<Obj3D>();
+		newObj->Initialize(objCommon_);
+		newObj->SetModel("Sphere/sphere.obj");
+		pointObjects_.push_back(std::move(newObj));
 	}
 
 	ImGui::Separator();
@@ -55,13 +67,16 @@ void RailEditor::Update(){
 
 // デバッグ用の描画処理
 void RailEditor::Draw(){
-	// 制御点の位置に球体を描画する処理を追加
-	for(const auto& point : controlPoints_){
-		pointObject_->SetTranslate(point.position);
+	// 制御点ごとに専用のObj3Dを使って描画する
+	Camera* activeCamera = CameraManager::GetInstance()->GetActiveCamera();
+	for(size_t i = 0; i < controlPoints_.size(); ++i){
+		pointObjects_[i]->SetTranslate(controlPoints_[i].position);
 		// エディター上で見やすいように少し小さくする
-		pointObject_->SetScale({0.5f, 0.5f, 0.5f});
-		pointObject_->Update();
-		pointObject_->Draw();
+		pointObjects_[i]->SetScale({0.5f, 0.5f, 0.5f});
+		// 追加 アクティブカメラが切り替わっても正しく描画されるよう毎フレーム同期
+		if(activeCamera) pointObjects_[i]->SetCamera(activeCamera);
+		pointObjects_[i]->Update();
+		pointObjects_[i]->Draw();
 	}
 }
 

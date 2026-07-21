@@ -50,6 +50,19 @@ void GameScene::Initialize(Obj3dCommon* object3dCommon,Input* input,SpriteCommon
 	// 変更 レールエディターの生成と初期化を追加しました
 	railEditor_ = std::make_unique<RailEditor>();
 	railEditor_->Initialize(object3dCommon_);
+
+	// 追加 俯瞰用のデバッグカメラを生成
+	CameraManager::GetInstance()->CreateCamera("debug_top",object3dCommon_->GetDxCommon()->GetDevice());
+	auto* debugTopCamera = CameraManager::GetInstance()->GetCamera("debug_top");
+	// 真上から見下ろす位置に配置(X回転90度=pi/2で真下向き)
+	debugTopCamera->SetTranslate({0.0f, 30.0f, 0.0f});
+	debugTopCamera->SetRotate({3.14159265f * 0.5f, 0.0f, 0.0f});
+
+	// 追加 カメラ位置を可視化するマーカーを生成
+	ModelManager::GetInstance()->LoadModel("Sphere/sphere.obj");
+	cameraMarker_ = std::make_unique<Obj3D>();
+	cameraMarker_->Initialize(object3dCommon_);
+	cameraMarker_->SetModel("Sphere/sphere.obj");
 }
 
 // シーンの終了処理
@@ -63,6 +76,31 @@ void GameScene::Update(){
 	// 変更 レールエディターの更新を追加しました
 	if(railEditor_) railEditor_->Update();
 
+	// 追加 レール進行度を時間で進めて、カメラをレール上に乗せる
+	if(railEditor_){
+		// エンジンが固定60fps前提(TimeManagerで60fps固定)なので、そのまま合わせる
+		const float deltaTime = 1.0f / 60.0f;
+		railT_ += railSpeed_ * deltaTime;
+		if(railT_ > 1.0f) railT_ -= 1.0f; // ひとまずループさせる(後で終端で止める形に変更予定)
+
+		Vector3 railPos = railEditor_->GetPositionOnRail(railT_);
+		Vector3 railRot = railEditor_->GetRotationOnRail(railT_);
+
+		if(Camera* mainCamera = CameraManager::GetInstance()->GetCamera("default")){
+			mainCamera->SetTranslate(railPos);
+			mainCamera->SetRotate(railRot);
+		}
+
+		// 追加 カメラマーカーもレール上の位置に追従させる
+		if(cameraMarker_){
+			cameraMarker_->SetTranslate(railPos);
+			cameraMarker_->SetScale({0.7f, 0.7f, 0.7f});
+			// 追加 アクティブカメラが切り替わっても正しく描画されるよう毎フレーム同期
+			if(Camera* activeCamera = CameraManager::GetInstance()->GetActiveCamera()) cameraMarker_->SetCamera(activeCamera);
+			cameraMarker_->Update();
+		}
+	}
+
 #ifdef USE_IMGUI
 	if(Camera* activeCamera = CameraManager::GetInstance()->GetActiveCamera()){
 		// デバッグ用のメインウィンドウ
@@ -75,6 +113,11 @@ void GameScene::Update(){
 
 			Vector3 camRot = activeCamera->GetRotate();
 			if(ImGui::DragFloat3("Camera Rotate",&camRot.x,0.01f)) activeCamera->SetRotate(camRot);
+
+			// 追加 俯瞰デバッグカメラの切り替えボタン
+			if(ImGui::Checkbox("Debug Top-Down View",&useDebugTopCamera_)){
+				CameraManager::GetInstance()->SetActiveCamera(useDebugTopCamera_?"debug_top":"default");
+			}
 		}
 
 		// ライティング設定のUI

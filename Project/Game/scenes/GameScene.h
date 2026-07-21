@@ -44,4 +44,14 @@ private:
 
 	// 変更 レールエディターを追加しました
 	std::unique_ptr<RailEditor> railEditor_;
+
+	// 追加 レール移動の進行度(0〜1)と速度
+	float railT_ = 0.0f;
+	float railSpeed_ = 0.05f; // 1秒あたりの進行量(仮値、後で調整)
+
+	// 追加 俯瞰デバッグカメラON/OFF状態
+	bool useDebugTopCamera_ = false;
+
+	// 追加 カメラの現在位置を可視化するためのマーカー
+	std::unique_ptr<Obj3D> cameraMarker_;
 };

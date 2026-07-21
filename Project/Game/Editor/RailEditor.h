@@ -38,6 +38,8 @@ public:
 private:
 	// 制御点を保存する配列
 	std::vector<ControlPoint> controlPoints_;
-	// 制御点描画用の3Dオブジェクトを追加
-	std::unique_ptr<Obj3D> pointObject_;
+	// 制御点描画用の3Dオブジェクト(制御点ごとに1個ずつ持つ)
+	std::vector<std::unique_ptr<Obj3D>> pointObjects_;
+	// 制御点追加時に新しいObj3Dを初期化するため保持
+	Obj3dCommon* objCommon_ = nullptr;
 };
