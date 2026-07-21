@@ -1,20 +1,30 @@
 #include "Particle.hlsli"
 
-struct TransformationMatrix
+// --- データ構造体 ---
+
+struct Particle
 {
-    float32_t4x4 WVP;
-    float32_t4x4 World;
+    float3 translate;
+    float padding1;
+
+    float3 scale;
+    float lifeTime;
+
+    float3 velocity;
+    float currentTime;
+
+    float4 color;
+
+    float2 uvOffset;
+    uint particleType;
+    float padding2;
 };
 
-struct ParticleForGPU
+struct PerView
 {
-    float32_t4x4 WVP;
-    float32_t4x4 World;
-    float32_t4 color;
-    float32_t2 uvOffset;
+    float32_t4x4 viewProjection;
+    float32_t4x4 billboardMatrix;
 };
-
-StructuredBuffer<ParticleForGPU> gParticle : register(t0);
 
 struct VertexShaderInput
 {
@@ -23,21 +33,34 @@ struct VertexShaderInput
     float32_t3 normal : NORMAL0;
 };
 
+// --- リソースバインド ---
+
+StructuredBuffer<Particle> gParticles : register(t0);
+ConstantBuffer<PerView> gPerView : register(b0);
+
+// --- Vertex Shader メイン ---
+
 VertexShaderOutput main(VertexShaderInput input, uint32_t instanceId : SV_InstanceID)
 {
     VertexShaderOutput output;
 
-	// 行列による座標変換
-    output.position = mul(input.position, gParticle[instanceId].WVP);
+    // 1. パーティクルデータの取得
+    Particle particle = gParticles[instanceId];
 
-	// 元のUV座標に、インスタンスごとのオフセット値を足す
-    output.texcoord = input.texcoord + gParticle[instanceId].uvOffset;
+    // 2. ワールド行列の構築 (ビルボード行列ベース)
+    float32_t4x4 worldMatrix = gPerView.billboardMatrix;
+    
+    worldMatrix[0] *= particle.scale.x;
+    worldMatrix[1] *= particle.scale.y;
+    worldMatrix[2] *= particle.scale.z;
+    worldMatrix[3].xyz = particle.translate;
 
-	// 法線の変換
-    output.normal = normalize(mul(input.normal, (float32_t3x3) gParticle[instanceId].World));
+    // 3. 座標変換 (WVP)
+    output.position = mul(input.position, mul(worldMatrix, gPerView.viewProjection));
 
-	// 色の受け渡し
-    output.color = gParticle[instanceId].color;
+    // 4. UV座標と色の出力
+    output.texcoord = input.texcoord + particle.uvOffset;
+    output.color = particle.color;
 
     return output;
 }

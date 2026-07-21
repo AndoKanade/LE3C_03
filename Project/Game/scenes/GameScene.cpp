@@ -15,6 +15,7 @@
 #include "Animation.h"
 #include "Application.h"
 #include "Logger.h"
+#include "LevelManager.h"
 
 namespace{
 	const std::string kTextureChecker = "resource/uvChecker.png";
@@ -30,17 +31,13 @@ namespace{
 	const std::string kModelTerrain = "Terrain/terrain.obj";
 	const std::string kModelSimpleSkin = "simpleSkin/simpleSkin.gltf";
 	const std::string kModelAnimationCube = "AnimatedCube/AnimatedCube.gltf";
-	const std::string kModelHuman = "human/walk.gltf";
-
-	const std::string kParticlePrimitive = "Circle";
-	const std::string kParticleRing = "Ring";
-	const std::string kParticleCylinder = "Cylinder";
+	const std::string kModelHuman = "human/sneakWalk.gltf";
 }
 
 GameScene::GameScene() = default;
 GameScene::~GameScene() = default;
 
-// 初期化
+// --- 初期化 ---
 void GameScene::Initialize(Obj3dCommon* object3dCommon,Input* input,SpriteCommon* spriteCommon){
 	object3dCommon_ = object3dCommon;
 	input_ = input;
@@ -120,39 +117,59 @@ void GameScene::Initialize(Obj3dCommon* object3dCommon,Input* input,SpriteCommon
 	humanObj_->Initialize(object3dCommon_);
 	humanObj_->SetModel(kModelHuman);
 	humanObj_->SetTexture("resource/human/white.png");
-	humanObj_->LoadAnimation("resource/human/","walk.gltf");
+	humanObj_->LoadAnimation("resource/human/","sneakWalk.gltf");
 
 	// パーティクルの設定
-	ParticleManager::GetInstance()->CreateParticleGroup(kParticleRing,kTexturegradationLine,true,false);
-	Transform ringConfig = {{0.5f, 0.5f, 0.5f}, {0.0f, 0.0f, 0.0f}, {1.0f, 2.0f, 0.0f}};
-	ringEmitter_ = std::make_unique<ParticleEmitter>(kParticleRing,ringConfig,1,0.5f);
-	ringEmitter_->SetVelocity({0.0f, 0.5f, 0.0f});
-	ringEmitter_->SetLifeTime(1.0f);
-
-	ParticleManager::GetInstance()->CreateParticleGroup(kParticlePrimitive,kTextureCircle2,false,false);
-	Transform circleConfig = {{0.05f, 1.0f, 1.0f}, {0.0f, 0.0f, 0.0f}, {1.0f, 2.0f, 0.0f}};
-	circleEmitter_ = std::make_unique<ParticleEmitter>(kParticlePrimitive,circleConfig,3,0.5f);
-	circleEmitter_->SetVelocity({0.0f, 0.5f, 0.0f});
-	circleEmitter_->SetLifeTime(1.0f);
-
-	ParticleManager::GetInstance()->CreateParticleGroup(kParticleCylinder,kTexturegradationLine,false,true);
-	Transform cylinderConfig = {{1.0f, 1.0f, 1.0f}, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}};
-	cylinderEmitter_ = std::make_unique<ParticleEmitter>(kParticleCylinder,cylinderConfig,1,0.1f);
-	cylinderEmitter_->SetColor({0.2f, 0.5f, 1.0f, 0.8f});
-	cylinderEmitter_->SetLifeTime(2.0f);
-	cylinderEmitter_->SetVelocity({0.0f, 0.0f, 0.0f});
-
 	ParticleManager::GetInstance()->CreateParticleGroup("Shockwave",kTexturegradationLine,true,false,true);
 	ParticleManager::GetInstance()->CreateParticleGroup("Spark",kTextureCircle2,false,false,false,true);
 	ParticleManager::GetInstance()->CreateParticleGroup("Smoke",kTextureCircle2,false,false,false,false,true);
 	ParticleManager::GetInstance()->CreateParticleGroup("Charge",kTexturegradationLine,false,false,false,false,false,true);
 	ParticleManager::GetInstance()->CreateParticleGroup("Aura",kTextureCircle2,false,false,false,false,false,false,true);
 	ParticleManager::GetInstance()->CreateParticleGroup("Warp",kTexturegradationLine,false,true,false,false,false,false,false,true);
+
+	LevelManager levelManager;
+	levelManager.LoadJSON("level.json");
+
+	for(const auto& objData : levelManager.GetObjects()){
+		if(objData.type == "MESH"){
+			// 新しいObj3Dインスタンスを生成・初期化
+			auto newObj = std::make_shared<Obj3D>();
+			newObj->Initialize(object3dCommon_);
+
+			// ファイル名(モデル名)が指定されていればモデルをセット
+			if(!objData.fileName.empty()){
+				ModelManager::GetInstance()->LoadModel(objData.fileName);
+				newObj->SetModel(objData.fileName);
+			}
+
+			// トランスフォームの適用
+			newObj->SetTranslate(objData.translation);
+			newObj->SetScale(objData.scaling);
+
+			// JSONに保存されている回転角(度数法)をラジアンに変換
+			float radX = objData.rotation.x * (3.14159265f / 180.0f);
+			float radY = objData.rotation.y * (3.14159265f / 180.0f);
+			float radZ = objData.rotation.z * (3.14159265f / 180.0f);
+
+			// MyMathの関数を使ってオイラー角からクォータニオンに変換してセット
+			newObj->SetQuaternion(MakeQuaternionFromEuler(radX,radY,radZ));
+
+			// ※必要であればコライダーの初期化もここで行う
+			/*
+			if (objData.colliderType == "BOX") {
+				newObj->SetCollider(objData.colliderCenter, objData.colliderSize);
+			}
+			*/
+
+			// 管理用配列に追加
+			levelObjects_.push_back(newObj);
+		}
+	}
 }
 
 void GameScene::Finalize(){}
 
-// 更新処理
+// --- 更新処理 ---
 void GameScene::Update(){
 	// オブジェクトの更新
 	if(sphereObj_) sphereObj_->Update();
@@ -160,14 +177,6 @@ void GameScene::Update(){
 	if(simpleSkinObj_) simpleSkinObj_->Update();
 	if(skybox_) skybox_->Update(*CameraManager::GetInstance()->GetActiveCamera());
 	if(planeObj_) planeObj_->Update();
-
-	// 入力イベント
-	if(input_->TriggerKey(DIK_1)) EmitShockwave({0.0f, 0.0f, 0.0f});
-	if(input_->TriggerKey(DIK_2)) EmitSpark({0.0f, 0.0f, 0.0f});
-	if(input_->TriggerKey(DIK_3)) EmitSmoke({0.0f, 0.0f, 0.0f});
-	if(input_->TriggerKey(DIK_4)) EmitCharge({0.0f, 0.0f, 0.0f});
-	if(input_->TriggerKey(DIK_5)) EmitAura({0.0f, 0.0f, 0.0f});
-	if(input_->TriggerKey(DIK_6)) EmitWarp();
 
 	// キャラクター更新
 	if(humanObj_){
@@ -191,10 +200,14 @@ void GameScene::Update(){
 		ParticleManager::GetInstance()->Update(cam);
 	}
 
+	for(auto& obj : levelObjects_){
+		obj->Update();
+	}
+
 	// --- デバッグUIの表示 ---
 #ifdef USE_IMGUI
 	if(Camera* activeCamera = CameraManager::GetInstance()->GetActiveCamera()){
-		// --- メインデバッグウィンドウ ---
+		// メインデバッグウィンドウ
 		ImGui::Begin("GameScene Debug");
 
 		// カメラ設定
@@ -223,7 +236,6 @@ void GameScene::Update(){
 			if(SpotLight* sData = object3dCommon_->GetSpotLightData()){
 				ImGui::Text("Spot Light");
 				ImGui::ColorEdit4("Spot Color",&sData->color.x);
-				// ... (SpotLightの各パラメータ)
 			}
 		}
 
@@ -244,7 +256,6 @@ void GameScene::Update(){
 				}
 
 				if(ImGui::Checkbox("Manual Control",&isManualControl)){
-					// 手動操作へ切り替わった瞬間に反映
 					if(isManualControl) skeleton.Update();
 				}
 			}
@@ -253,18 +264,24 @@ void GameScene::Update(){
 		ModelManager::GetInstance()->UpdateLightGui();
 		ImGui::End();
 
-		// --- パーティクル制御ウィンドウ ---
+		// パーティクル制御ウィンドウ
 		ImGui::Begin("Particle Control");
-		const char* particleButtons[] = {
-			"Shockwave", "Spark", "Ring", "Circle", "Cylinder", "Smoke", "Charge", "Aura", "Warp"
-		};
 
-		// 各パーティクル発行ボタン
-		if(ImGui::Button("Emit Shockwave")) EmitShockwave({0,0,0}); ImGui::SameLine();
-		if(ImGui::Button("Emit Spark")) EmitSpark({0,0,0});
-		if(ImGui::Button("Emit Ring")){ if(ringEmitter_) ringEmitter_->Emit(); } ImGui::SameLine();
-		if(ImGui::Button("Emit Circle")){ if(circleEmitter_) circleEmitter_->Emit(); }
-		// ... (他のボタンも同様)
+		auto* particleManager = ParticleManager::GetInstance();
+
+		if(ImGui::Button("Emit Shockwave")) particleManager->EmitShockwave({0.0f, 0.0f, 0.0f});
+		ImGui::SameLine();
+		if(ImGui::Button("Emit Spark")) particleManager->EmitSpark({0.0f, 0.0f, 0.0f});
+
+		ImGui::SameLine();
+		if(ImGui::Button("Emit Smoke")) particleManager->EmitSmoke({0.0f, 0.0f, 0.0f});
+
+		if(ImGui::Button("Emit Charge")) particleManager->EmitCharge({0.0f, 0.0f, 0.0f});
+		ImGui::SameLine();
+		if(ImGui::Button("Emit Aura")) particleManager->EmitAura({0.0f, 0.0f, 0.0f});
+
+		if(ImGui::Button("Emit Warp")) particleManager->EmitWarp();
+
 		ImGui::End();
 
 		Application::GetInstance()->ShowPostProcessUI();
@@ -272,74 +289,17 @@ void GameScene::Update(){
 #endif
 }
 
-
-// 描画処理
+// --- 描画処理 ---
 void GameScene::Draw(){
 	object3dCommon_->Draw();
 	if(humanObj_) humanObj_->Draw();
+
+	for(const auto& obj : levelObjects_){
+		obj->Draw();
+	}
 
 	if(Camera* cam = CameraManager::GetInstance()->GetActiveCamera()){
 		Matrix4x4 viewProj = Multiply(cam->GetViewMatrix(),cam->GetProjectionMatrix());
 		ParticleManager::GetInstance()->Draw(viewProj);
 	}
-}
-
-// パーティクル発生処理
-void GameScene::EmitShockwave(const Vector3& pos){
-	ParticleManager::GetInstance()->Emit("Shockwave",{{0.1f, 0.1f, 0.1f}, {0, 0, 0}, pos},1,{1,1,1,1},{0,0,0},0.3f);
-}
-
-void GameScene::EmitSpark(const Vector3& position){
-	Transform transform;
-	transform.translate = position;
-	transform.scale = {0.05f, 0.05f, 0.05f};
-	transform.rotate = {0.0f, 0.0f, 0.0f};
-
-	ParticleManager::GetInstance()->Emit(
-		"Spark",transform,20,{1.0f, 0.5f, 0.0f, 1.0f},{0.0f, 0.0f, 0.0f},0.5f
-	);
-}
-
-void GameScene::EmitSmoke(const Vector3& position){
-	Transform transform;
-	transform.translate = position;
-	transform.scale = {0.2f, 0.2f, 0.2f};
-	transform.rotate = {0.0f, 0.0f, 0.0f};
-
-	ParticleManager::GetInstance()->Emit(
-		"Smoke",transform,5,{0.5f, 0.5f, 0.5f, 0.8f},{0.0f, 1.0f, 0.0f},1.5f
-	);
-}
-
-void GameScene::EmitCharge(const Vector3& position){
-	Transform transform;
-	transform.translate = position;
-	transform.scale = {0.1f, 0.5f, 0.1f};
-	transform.rotate = {0.0f, 0.0f, 0.0f};
-
-	ParticleManager::GetInstance()->Emit(
-		"Charge",transform,30,{0.2f, 0.8f, 1.0f, 1.0f},{0.0f, 0.0f, 0.0f},0.6f
-	);
-}
-
-void GameScene::EmitAura(const Vector3& position){
-	Transform transform;
-	transform.translate = position;
-	transform.scale = {0.3f, 0.3f, 0.3f};
-	transform.rotate = {0.0f, 0.0f, 0.0f};
-
-	ParticleManager::GetInstance()->Emit(
-		"Aura",transform,1,{0.8f, 1.0f, 0.2f, 0.6f},{0.0f, 2.0f, 0.0f},1.0f
-	);
-}
-
-void GameScene::EmitWarp(){
-	Transform transform;
-	transform.translate = {0.0f, 0.0f, 0.0f};
-	transform.scale = {1.0f, 1.0f, 1.0f};
-	transform.rotate = {0.0f, 0.0f, 0.0f};
-
-	ParticleManager::GetInstance()->Emit(
-		"Warp",transform,100,{0.5f, 0.8f, 1.0f, 0.8f},{0.0f, 0.0f, 0.0f},1.0f
-	);
 }

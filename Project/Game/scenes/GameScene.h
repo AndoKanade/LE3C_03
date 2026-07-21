@@ -1,7 +1,8 @@
 #pragma once
 
-#include "BaseScene.h"
+#include "systems/BaseScene.h"
 #include "MyMath.h"
+#include "LevelManager.h"
 #include <memory>
 #include <string>
 #include <vector>
@@ -28,14 +29,6 @@ public:
 	void Finalize() override;
 	void Update() override;
 	void Draw() override;
-
-	// パーティクル発生関数
-	void EmitShockwave(const Vector3& position);
-	void EmitSpark(const Vector3& position);
-	void EmitSmoke(const Vector3& position);
-	void EmitCharge(const Vector3& position);
-	void EmitAura(const Vector3& position);
-	void EmitWarp();
 
 private:
 	// 外部依存
@@ -71,4 +64,6 @@ private:
 	// 設定・状態
 	const std::string kBgmPath_ = "resource/You_and_Me.mp3";
 	bool isPaused_ = false;
+
+	std::vector<std::shared_ptr<Obj3D>> levelObjects_;
 };

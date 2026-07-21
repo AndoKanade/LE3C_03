@@ -20,197 +20,187 @@
 // 前方宣言
 class Camera;
 
-/// <summary>
-/// パーティクル1粒のデータ (CPU側計算用)
-/// </summary>
+// =============================================================================
+// データ構造体
+// =============================================================================
+
 struct Particle{
-	Transform transform;  // 位置・回転・スケール
-	Vector3 velocity;     // 速度
-	Vector4 color;        // 色 (RGBA)
-	float lifeTime;       // 生存可能時間
-	float currentTime;    // 経過時間
+    Vector3 translate;
+    float padding1;
+
+    Vector3 scale;
+    float lifeTime;
+
+    Vector3 velocity;
+    float currentTime;
+
+    Vector4 color;
+
+    Vector2 uvOffset;
+    uint32_t particleType;
+    float padding2;
 };
 
-/// <summary>
-/// GPUへ送るインスタンシング用データ
-/// </summary>
 struct ParticleForGPU{
-	Matrix4x4 WVP;   // World * View * Projection 行列
-	Matrix4x4 World; // World 行列
-	Vector4 color;   // 色
-	Vector2 uvOffset; // UVオフセット (アニメーション用)
+    Vector3 translate;
+    float padding1;
+
+    Vector3 scale;
+    float lifeTime;
+
+    Vector3 velocity;
+    float currentTime;
+
+    Vector4 color;
+
+    Vector2 uvOffset;
+    uint32_t particleType;
+    float padding2;
 };
 
-/// <summary>
-/// パーティクルグループ
-/// テクスチャごとに管理されるパーティクルの集合体
-/// </summary>
+struct PerView{
+    Matrix4x4 viewProjection;
+    Matrix4x4 billboardMatrix;
+};
+
+struct EmitterSphere{
+    Vector3 translate;
+    float radius;
+    uint32_t count;
+    float frequency;
+    float frequencyTime;
+    uint32_t emit;
+    Vector4 color;
+    Vector3 velocity;
+    float lifeTime;
+    uint32_t particleType;
+};
+
+struct PerFrame{
+    float time;
+    float deltaTime;
+};
+
 struct ParticleGroup{
-	// --- マテリアル情報 ---
-	std::string textureFilePath;  // テクスチャのパス (識別キー)
-	uint32_t textureSrvIndex;     // SRVのインデックス
+    // リソース情報
+    std::string textureFilePath;
+    uint32_t textureSrvIndex;
+    static const uint32_t kNumMaxInstance = 1024;
 
-	// --- パーティクル管理 ---
-	std::list<Particle> particles; // 発生中のパーティクルリスト
+    // GPUリソース
+    uint32_t instancingSrvIndex;
+    uint32_t instancingUavIndex;
+    Microsoft::WRL::ComPtr<ID3D12Resource> instancingResource;
+    ParticleForGPU* instancingData = nullptr;
+    uint32_t numInstance = 0;
 
-	// --- インスタンシング描画用データ ---
-	// グループごとの最大描画数
-	static const uint32_t kNumMaxInstance = 1000;
+    // エミッター関連
+    D3D12_RESOURCE_STATES currentState = D3D12_RESOURCE_STATE_COMMON;
+    Microsoft::WRL::ComPtr<ID3D12Resource> emitterResource;
+    EmitterSphere* emitterData = nullptr;
 
-	// インスタンシング用リソース (StructuredBuffer等)
-	uint32_t instancingSrvIndex;
-	Microsoft::WRL::ComPtr<ID3D12Resource> instancingResource;
+    Microsoft::WRL::ComPtr<ID3D12Resource> freeListIndexResource;
+    uint32_t freeListIndexUavIndex;
+    Microsoft::WRL::ComPtr<ID3D12Resource> freeListResource;
+    uint32_t freeListUavIndex;
 
-	// マッピング済みポインタ (毎フレーム書き込む用)
-	ParticleForGPU* instancingData = nullptr;
+    Microsoft::WRL::ComPtr<ID3D12Resource> indexStagingResource;
+    Microsoft::WRL::ComPtr<ID3D12Resource> listStagingResource;
 
-	// 現在描画すべきインスタンス数
-	uint32_t numInstance = 0;
 
-	bool isRing = false;
-	bool isCylinder = false;
-	bool isShockwave = false;
-	bool isSpark = false;
-	bool isSmoke = false;
-	bool isCharge = false;
-	bool isAura = false;
-	bool isWarp = false;
-
+    // フラグ
+    bool isRing = false;
+    bool isCylinder = false;
+    bool isShockwave = false;
+    bool isSpark = false;
+    bool isSmoke = false;
+    bool isCharge = false;
+    bool isAura = false;
+    bool isWarp = false;
 };
 
-/// <summary>
-/// パーティクル管理マネージャー (シングルトン)
-/// 複数のパーティクルグループを一括管理し、更新・描画を行います。
-/// </summary>
+// =============================================================================
+// クラス定義
+// =============================================================================
+
 class ParticleManager{
 private:
-	// シングルトンのためコンストラクタ等は隠蔽
-	ParticleManager() = default;
-	~ParticleManager() = default;
+    ParticleManager() = default;
+    ~ParticleManager() = default;
 
 public:
-	// コピー禁止
-	ParticleManager(const ParticleManager&) = delete;
-	ParticleManager& operator=(const ParticleManager&) = delete;
+    ParticleManager(const ParticleManager&) = delete;
+    ParticleManager& operator=(const ParticleManager&) = delete;
 
-	// -------------------------------------------------
-	// ライフサイクル
-	// -------------------------------------------------
+    static ParticleManager* GetInstance();
 
-	/// <summary>
-	/// インスタンス取得
-	/// </summary>
-	static ParticleManager* GetInstance();
+    // ライフサイクル
+    void Initialize(DXCommon* dxCommon,SrvManager* srvManager);
+    void Finalize();
+    void Update(Camera* camera);
+    void Draw(const Matrix4x4& viewProjectionMatrix);
 
-	/// <summary>
-	/// 初期化処理
-	/// 共通リソース(パイプライン、モデル等)の生成を行います。
-	/// </summary>
-	/// <param name="dxCommon">DirectX共通クラス</param>
-	/// <param name="srvManager">SRVマネージャー</param>
-	void Initialize(DXCommon* dxCommon,SrvManager* srvManager);
+    // パーティクル操作
+    void CreateParticleGroup(const std::string& name,const std::string& textureFilePath,
+        bool isRing = false,bool isCylinder = false,bool isShockwave = false,
+        bool isSpark = false,bool isSmoke = false,bool isCharge = false,
+        bool isAura = false,bool isWarp = false);
 
-	/// <summary>
-	/// 終了処理
-	/// リソースの解放を行います。
-	/// </summary>
-	void Finalize();
+    void Emit(const std::string& name,const Transform& emitterTransform,uint32_t count,
+        const Vector4& color,const Vector3& velocity,float lifeTime);
 
-	/// <summary>
-	/// 毎フレーム更新
-	/// 全グループのパーティクルの寿命管理・移動処理を行います。
-	/// </summary>
-	/// <param name="camera">カメラ情報 (ビルボード計算等に使用)</param>
-	void Update(Camera* camera);
+    void EmitShockwave(const Vector3& position);
+    void EmitSpark(const Vector3& position);
+    void EmitSmoke(const Vector3& position);
+    void EmitCharge(const Vector3& position);
+    void EmitAura(const Vector3& position);
+    void EmitWarp();
 
-	/// <summary>
-	/// 描画処理
-	/// 全グループのパーティクルを描画します。
-	/// </summary>
-	void Draw(const Matrix4x4& viewProjectionMatrix);
-
-	// -------------------------------------------------
-	// パーティクル操作
-	// -------------------------------------------------
-
-	/// <summary>
-	/// パーティクルグループの作成
-	/// 新しいテクスチャや種類のパーティクルを使う前に呼び出します。
-	/// </summary>
-	/// <param name="name">グループ名 (Emit時に使用)</param>
-	/// <param name="textureFilePath">使用するテクスチャパス</param>
-	void CreateParticleGroup(const std::string& name,const std::string& textureFilePath,bool isRing = false,bool isCylinder = false,bool isShockwave = false,bool isSpark = false,bool isSmoke = false,bool isCharge = false,bool isAura = false,bool isWarp = false);
-	/// <summary>
-	/// パーティクルの発生 (エミット)
-	/// 指定したグループにパーティクルを追加します。
-	/// </summary>
-	/// <param name="name">登録済みのグループ名</param>
-	/// <param name="position">発生位置</param>
-	/// <param name="count">発生数</param>
-	void Emit(const std::string& name,const Transform& emitterTransform,uint32_t count,const Vector4& color,const Vector3& velocity,float lifeTime);
 private:
-	// -------------------------------------------------
-	// 内部処理・ヘルパー
-	// -------------------------------------------------
+    // 内部処理・ヘルパー
+    void CreateGraphicsPipeline();
+    void CreateComputePipeline();
+    void CreateModel();
+    void CreateRingModel();
+    void CreateCylinderModel();
+    Particle MakeNewParticle(const Vector3& translate);
 
-	/// <summary>
-	/// グラフィックスパイプラインの生成 (初期化時のみ)
-	/// </summary>
-	void CreateGraphicsPipeline();
+    struct VertexData{
+        Vector4 position;
+        Vector2 texcoord;
+        Vector3 normal;
+    };
 
-	/// <summary>
-	/// 共通モデル(板ポリゴン)の生成 (初期化時のみ)
-	/// </summary>
-	void CreateModel();
+    // メンバ変数
+    DXCommon* dxCommon_ = nullptr;
+    SrvManager* srvManager_ = nullptr;
+    std::mt19937 randomEngine_;
+    std::unordered_map<std::string,std::unique_ptr<ParticleGroup>> particleGroups_;
 
-	void CreateRingModel();
+    // グラフィックスパイプライン
+    Microsoft::WRL::ComPtr<ID3D12RootSignature> rootSignature_;
+    Microsoft::WRL::ComPtr<ID3D12PipelineState> graphicsPipelineState_;
 
-	void CreateCylinderModel();
+    // コンピュートパイプライン
+    Microsoft::WRL::ComPtr<ID3D12RootSignature> computeRootSignature_;
+    Microsoft::WRL::ComPtr<ID3D12PipelineState> computePipelineState_;
+    Microsoft::WRL::ComPtr<ID3D12RootSignature> emitComputeRootSignature_;
+    Microsoft::WRL::ComPtr<ID3D12PipelineState> emitComputePipelineState_;
 
-	/// <summary>
-	/// 新規パーティクルデータの生成
-	/// ランダムな速度や寿命を設定して返します。
-	/// </summary>
-	Particle MakeNewParticle(const Vector3& translate);
+    // モデル用リソース
+    Microsoft::WRL::ComPtr<ID3D12Resource> vertexResource_;
+    Microsoft::WRL::ComPtr<ID3D12Resource> vertexBuffer_;
+    D3D12_VERTEX_BUFFER_VIEW vertexBufferView_{};
+    Microsoft::WRL::ComPtr<ID3D12Resource> ringVertexBuffer_;
+    D3D12_VERTEX_BUFFER_VIEW ringVertexBufferView_{};
+    uint32_t ringVertexCount_ = 0;
+    Microsoft::WRL::ComPtr<ID3D12Resource> cylinderVertexBuffer_;
+    D3D12_VERTEX_BUFFER_VIEW cylinderVertexBufferView_{};
+    uint32_t cylinderVertexCount_ = 0;
 
-	// 頂点データの構造体 (内部で使用)
-	struct VertexData{
-		Vector4 position;
-		Vector2 texcoord;
-		Vector3 normal;
-	};
-
-	// -------------------------------------------------
-	// メンバ変数
-	// -------------------------------------------------
-
-	// --- 外部参照 (所有権なし) ---
-	DXCommon* dxCommon_ = nullptr;
-	SrvManager* srvManager_ = nullptr;
-
-	// --- ユーティリティ ---
-	std::mt19937 randomEngine_; // ランダム生成器
-
-	// --- パーティクルデータ管理 ---
-	// キー: グループ名, 値: パーティクルグループ(unique_ptr管理)
-	std::unordered_map<std::string,std::unique_ptr<ParticleGroup>> particleGroups_;
-
-	// --- 描画共通リソース (全グループで使い回す) ---
-	Microsoft::WRL::ComPtr<ID3D12RootSignature> rootSignature_;
-	Microsoft::WRL::ComPtr<ID3D12PipelineState> graphicsPipelineState_;
-
-	// 板ポリゴン用の頂点バッファ
-	Microsoft::WRL::ComPtr<ID3D12Resource> vertexResource_; // 一時バッファ
-	Microsoft::WRL::ComPtr<ID3D12Resource> vertexBuffer_;   // 実際のバッファ
-	D3D12_VERTEX_BUFFER_VIEW vertexBufferView_{};
-
-	//Ring用のメンバ変数
-	Microsoft::WRL::ComPtr<ID3D12Resource> ringVertexBuffer_;
-	D3D12_VERTEX_BUFFER_VIEW ringVertexBufferView_{};
-	uint32_t ringVertexCount_ = 0;
-
-	// Cylinder用のメンバ変数
-	Microsoft::WRL::ComPtr<ID3D12Resource> cylinderVertexBuffer_;
-	D3D12_VERTEX_BUFFER_VIEW cylinderVertexBufferView_{};
-	uint32_t cylinderVertexCount_ = 0;
+    // 定数バッファ用リソース
+    Microsoft::WRL::ComPtr<ID3D12Resource> perViewResource_;
+    PerView* perViewData_ = nullptr;
+    Microsoft::WRL::ComPtr<ID3D12Resource> perFrameResource_;
+    PerFrame* perFrameData_ = nullptr;
 };
