@@ -100,6 +100,12 @@
     <Filter Include="Resources\shader\PostEffect">
       <UniqueIdentifier>{3ab180dc-6cfc-405e-ad14-24f8d876eb5d}</UniqueIdentifier>
     </Filter>
+    <Filter Include="ヘッダー ファイル\Game\Editor">
+      <UniqueIdentifier>{5acef0a5-0d7c-432e-bfbf-17f385645b99}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ソース ファイル\Game\Editor">
+      <UniqueIdentifier>{db062af4-0868-461d-a37b-756583548a80}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Engine\Base\DXCommon.cpp">
@@ -210,7 +216,9 @@
     <ClCompile Include="Engine\Manager\LevelManager.cpp">
       <Filter>ソース ファイル\Engine\Manager</Filter>
     </ClCompile>
-    <ClCompile Include="Game\Editor\RailEditor.cpp" />
+    <ClCompile Include="Game\Editor\RailEditor.cpp">
+      <Filter>ソース ファイル\Game\Editor</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Engine\Base\D3DResourceLeakChecker.h">
@@ -333,7 +341,9 @@
     <ClInclude Include="Engine\Manager\LevelManager.h">
       <Filter>ヘッダー ファイル\Engine\Manager</Filter>
     </ClInclude>
-    <ClInclude Include="Game\Editor\RailEditor.h" />
+    <ClInclude Include="Game\Editor\RailEditor.h">
+      <Filter>ヘッダー ファイル\Game\Editor</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="Engine\Graphics\Shaders\Obj3D\Object3d.hlsli">
