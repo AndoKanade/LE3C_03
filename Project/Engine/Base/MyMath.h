@@ -184,6 +184,10 @@ constexpr Vector3 Lerp(const Vector3& v1,const Vector3& v2,float t){
     return v1 + (v2 - v1) * t;
 }
 
+constexpr float Lerp(float a,float b,float t){
+    return a + (b - a) * t;
+}
+
 inline Vector3 CatmullRom(const Vector3& p0,const Vector3& p1,const Vector3& p2,const Vector3& p3,float t){
     float t2 = t * t;
     float t3 = t2 * t;
