@@ -90,27 +90,27 @@ void GameScene::Initialize(Obj3dCommon* object3dCommon,Input* input,SpriteCommon
 		}
 	}
 
-	// 追加 画面中央固定のレティクルを生成(外枠+中心ドットの2枚構成)
-	TextureManager::GetInstance()->LoadTexture("reticle/reticleOutline.png");
-	TextureManager::GetInstance()->LoadTexture("reticle/reticle.png");
+	//// 追加 画面中央固定のレティクルを生成(外枠+中心ドットの2枚構成)
+	//TextureManager::GetInstance()->LoadTexture("reticle/reticleOutline.png");
+	//TextureManager::GetInstance()->LoadTexture("reticle/reticle.png");
 
-	reticleOutlineSprite_ = std::make_unique<Sprite>();
-	reticleOutlineSprite_->Initialize(spriteCommon_,"reticle/reticleOutline.png");
-	reticleOutlineSprite_->SetSize({36.0f, 36.0f});
-	reticleOutlineSprite_->SetAnchorPoint({0.5f, 0.5f}); // 中心を基準点にする
-	reticleOutlineSprite_->SetPosition({
-		static_cast<float>(WinAPI::kClientWidth) * 0.5f,
-		static_cast<float>(WinAPI::kClientHeight) * 0.5f
-		});
+	//reticleOutlineSprite_ = std::make_unique<Sprite>();
+	//reticleOutlineSprite_->Initialize(spriteCommon_,"reticle/reticleOutline.png");
+	//reticleOutlineSprite_->SetSize({36.0f, 36.0f});
+	//reticleOutlineSprite_->SetAnchorPoint({0.5f, 0.5f}); // 中心を基準点にする
+	//reticleOutlineSprite_->SetPosition({
+	//	static_cast<float>(WinAPI::kClientWidth) * 0.5f,
+	//	static_cast<float>(WinAPI::kClientHeight) * 0.5f
+	//	});
 
-	reticleCenterSprite_ = std::make_unique<Sprite>();
-	reticleCenterSprite_->Initialize(spriteCommon_,"reticle/reticle.png");
-	reticleCenterSprite_->SetSize({30.0f, 30.0f});
-	reticleCenterSprite_->SetAnchorPoint({0.5f, 0.5f});
-	reticleCenterSprite_->SetPosition({
-		static_cast<float>(WinAPI::kClientWidth) * 0.5f,
-		static_cast<float>(WinAPI::kClientHeight) * 0.5f
-		});
+	//reticleCenterSprite_ = std::make_unique<Sprite>();
+	//reticleCenterSprite_->Initialize(spriteCommon_,"reticle/reticle.png");
+	//reticleCenterSprite_->SetSize({30.0f, 30.0f});
+	//reticleCenterSprite_->SetAnchorPoint({0.5f, 0.5f});
+	//reticleCenterSprite_->SetPosition({
+	//	static_cast<float>(WinAPI::kClientWidth) * 0.5f,
+	//	static_cast<float>(WinAPI::kClientHeight) * 0.5f
+	//	});
 }
 
 // シーンの終了処理
