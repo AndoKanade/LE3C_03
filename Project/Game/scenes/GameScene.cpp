@@ -66,6 +66,7 @@ void GameScene::Initialize(Obj3dCommon* object3dCommon,Input* input,SpriteCommon
 	cameraMarker_->Initialize(object3dCommon_);
 	cameraMarker_->SetModel("Sphere/sphere.obj");
 
+
 	// 追加 カメラの向きを可視化する小さいマーカーを生成
 	cameraFacingMarker_ = std::make_unique<Obj3D>();
 	cameraFacingMarker_->Initialize(object3dCommon_);
