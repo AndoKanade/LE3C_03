@@ -48,6 +48,11 @@ void RailEditor::Update(){
 
 	ImGui::Separator();
 
+	// 追加 制御点モデルの表示ON/OFF切り替え(他のオブジェクトが見づらくなるとき用)
+	ImGui::Checkbox("Show Control Point Models",&showControlPointModels_);
+
+	ImGui::Separator();
+
 	// 各制御点の編集UI
 	for(size_t i = 0; i < controlPoints_.size(); ++i){
 		// IDの重複を防ぐためPushIDを使用
@@ -69,6 +74,9 @@ void RailEditor::Update(){
 
 // デバッグ用の描画処理
 void RailEditor::Draw(){
+	// 追加 表示OFFのときは制御点のモデルを描画しない
+	if(!showControlPointModels_) return;
+
 	Camera* activeCamera = CameraManager::GetInstance()->GetActiveCamera();
 
 	// 制御点ごとに専用の3Dオブジェクトで描画

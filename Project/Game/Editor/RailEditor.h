@@ -42,4 +42,5 @@ private:
 	std::vector<ControlPoint> controlPoints_;         // 制御点を保存する配列
 	std::vector<std::unique_ptr<Obj3D>> pointObjects_; // 制御点描画用の3Dオブジェクト群
 	Obj3dCommon* objCommon_ = nullptr;                // 3Dオブジェクト共通設定へのポインタ
+	bool showControlPointModels_ = true;              // 追加 制御点の球体モデルを描画するかどうか(ImGuiで切り替え)
 };
