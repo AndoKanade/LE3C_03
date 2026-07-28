@@ -26,6 +26,15 @@ void RailEditor::Initialize(Obj3dCommon* objCommon){
 	initialObj->Initialize(objCommon_);
 	initialObj->SetModel("Sphere/sphere.obj");
 	pointObjects_.push_back(std::move(initialObj));
+
+	// 追加 レール曲線可視化用のサンプリング点オブジェクトを固定数だけ生成しておく
+	curveObjects_.reserve(kCurveSampleCount);
+	for(int i = 0; i < kCurveSampleCount; ++i){
+		auto curveObj = std::make_unique<Obj3D>();
+		curveObj->Initialize(objCommon_);
+		curveObj->SetModel("Sphere/sphere.obj");
+		curveObjects_.push_back(std::move(curveObj));
+	}
 }
 
 // エディターの更新処理
@@ -50,6 +59,8 @@ void RailEditor::Update(){
 
 	// 追加 制御点モデルの表示ON/OFF切り替え(他のオブジェクトが見づらくなるとき用)
 	ImGui::Checkbox("Show Control Point Models",&showControlPointModels_);
+	// 追加 レール曲線(サンプリング点列)の表示ON/OFF切り替え
+	ImGui::Checkbox("Show Rail Curve",&showCurve_);
 
 	ImGui::Separator();
 
@@ -74,24 +85,44 @@ void RailEditor::Update(){
 
 // デバッグ用の描画処理
 void RailEditor::Draw(){
-	// 追加 表示OFFのときは制御点のモデルを描画しない
-	if(!showControlPointModels_) return;
-
 	Camera* activeCamera = CameraManager::GetInstance()->GetActiveCamera();
 
-	// 制御点ごとに専用の3Dオブジェクトで描画
-	for(size_t i = 0; i < controlPoints_.size(); ++i){
-		pointObjects_[i]->SetTranslate(controlPoints_[i].position);
-		// 視認性向上のためスケールを縮小
-		pointObjects_[i]->SetScale({0.5f, 0.5f, 0.5f});
+	// 追加 表示OFFのときは制御点のモデルを描画しない
+	if(showControlPointModels_){
+		// 制御点ごとに専用の3Dオブジェクトで描画
+		for(size_t i = 0; i < controlPoints_.size(); ++i){
+			pointObjects_[i]->SetTranslate(controlPoints_[i].position);
+			// 視認性向上のためスケールを縮小
+			pointObjects_[i]->SetScale({0.5f, 0.5f, 0.5f});
 
-		// アクティブカメラに毎フレーム同期
-		if(activeCamera){
-			pointObjects_[i]->SetCamera(activeCamera);
+			// アクティブカメラに毎フレーム同期
+			if(activeCamera){
+				pointObjects_[i]->SetCamera(activeCamera);
+			}
+
+			pointObjects_[i]->Update();
+			pointObjects_[i]->Draw();
 		}
+	}
 
-		pointObjects_[i]->Update();
-		pointObjects_[i]->Draw();
+	// 追加 レール曲線をサンプリング点列(小さい球)で可視化する簡易版
+	// Catmull-Romは制御点4つ以上必要なので、それ未満のときは何も描画しない
+	if(showCurve_ && controlPoints_.size() >= 4){
+		for(int i = 0; i < kCurveSampleCount; ++i){
+			float t = static_cast<float>(i) / static_cast<float>(kCurveSampleCount - 1);
+			Vector3 pos = GetPositionOnRail(t);
+
+			curveObjects_[i]->SetTranslate(pos);
+			// 制御点よりさらに小さくして、線のように見せる
+			curveObjects_[i]->SetScale({0.04f, 0.04f, 0.04f});
+
+			if(activeCamera){
+				curveObjects_[i]->SetCamera(activeCamera);
+			}
+
+			curveObjects_[i]->Update();
+			curveObjects_[i]->Draw();
+		}
 	}
 }
 

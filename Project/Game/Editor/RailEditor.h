@@ -43,4 +43,9 @@ private:
 	std::vector<std::unique_ptr<Obj3D>> pointObjects_; // 制御点描画用の3Dオブジェクト群
 	Obj3dCommon* objCommon_ = nullptr;                // 3Dオブジェクト共通設定へのポインタ
 	bool showControlPointModels_ = true;              // 追加 制御点の球体モデルを描画するかどうか(ImGuiで切り替え)
+
+	// 追加 レール曲線の可視化用(GetPositionOnRailを一定間隔でサンプリングして小さい球を並べる簡易版)
+	std::vector<std::unique_ptr<Obj3D>> curveObjects_; // サンプリング点描画用のオブジェクト群(固定数で使い回す)
+	bool showCurve_ = true;                            // 曲線表示ON/OFF(ImGuiで切り替え)
+	static constexpr int kCurveSampleCount = 100;       // サンプリング分割数(多いほど滑らかだが重くなる)
 };

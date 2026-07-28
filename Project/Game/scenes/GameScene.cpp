@@ -90,27 +90,27 @@ void GameScene::Initialize(Obj3dCommon* object3dCommon,Input* input,SpriteCommon
 		}
 	}
 
-	//// 追加 画面中央固定のレティクルを生成(外枠+中心ドットの2枚構成)
-	//TextureManager::GetInstance()->LoadTexture("reticle/reticleOutline.png");
-	//TextureManager::GetInstance()->LoadTexture("reticle/reticle.png");
+	// 追加 画面中央固定のレティクルを生成(外枠+中心ドットの2枚構成)
+	TextureManager::GetInstance()->LoadTexture("resource/Reticle/reticleOutline.png");
+	TextureManager::GetInstance()->LoadTexture("resource/Reticle/reticle.png");
 
-	//reticleOutlineSprite_ = std::make_unique<Sprite>();
-	//reticleOutlineSprite_->Initialize(spriteCommon_,"reticle/reticleOutline.png");
-	//reticleOutlineSprite_->SetSize({36.0f, 36.0f});
-	//reticleOutlineSprite_->SetAnchorPoint({0.5f, 0.5f}); // 中心を基準点にする
-	//reticleOutlineSprite_->SetPosition({
-	//	static_cast<float>(WinAPI::kClientWidth) * 0.5f,
-	//	static_cast<float>(WinAPI::kClientHeight) * 0.5f
-	//	});
+	reticleOutlineSprite_ = std::make_unique<Sprite>();
+	reticleOutlineSprite_->Initialize(spriteCommon_,"resource/Reticle/reticleOutline.png");
+	reticleOutlineSprite_->SetSize({48.0f, 48.0f});
+	reticleOutlineSprite_->SetAnchorPoint({0.5f, 0.5f}); // 中心を基準点にする
+	reticleOutlineSprite_->SetPosition({
+		static_cast<float>(WinAPI::kClientWidth) * 0.5f,
+		static_cast<float>(WinAPI::kClientHeight) * 0.5f
+		});
 
-	//reticleCenterSprite_ = std::make_unique<Sprite>();
-	//reticleCenterSprite_->Initialize(spriteCommon_,"reticle/reticle.png");
-	//reticleCenterSprite_->SetSize({30.0f, 30.0f});
-	//reticleCenterSprite_->SetAnchorPoint({0.5f, 0.5f});
-	//reticleCenterSprite_->SetPosition({
-	//	static_cast<float>(WinAPI::kClientWidth) * 0.5f,
-	//	static_cast<float>(WinAPI::kClientHeight) * 0.5f
-	//	});
+	reticleCenterSprite_ = std::make_unique<Sprite>();
+	reticleCenterSprite_->Initialize(spriteCommon_,"resource/Reticle/reticle.png");
+	reticleCenterSprite_->SetSize({48.0f, 48.0f});
+	reticleCenterSprite_->SetAnchorPoint({0.5f, 0.5f});
+	reticleCenterSprite_->SetPosition({
+		static_cast<float>(WinAPI::kClientWidth) * 0.5f,
+		static_cast<float>(WinAPI::kClientHeight) * 0.5f
+		});
 }
 
 // シーンの終了処理
@@ -138,6 +138,10 @@ void GameScene::Update(){
 		Vector3 railPos = railEditor_->GetPositionOnRail(railT_);
 		Vector3 railRot = railEditor_->GetRotationOnRail(railT_);
 
+		// 追加 三人称視点用に、カメラの実位置はレールそのものではなく少し上に置く
+		// (レール上に直接カメラがあると、キャラクター視点っぽくなり三人称の見た目として不自然なため)
+		Vector3 cameraPos = railPos + Vector3{0.0f, kCameraHeightOffset_, 0.0f};
+
 		// 追加 プレイヤー入力で照準(カメラの向き)をレールの向きに上乗せする
 		// 現状エンジンにキーボード入力しかないため、矢印キーで操作(将来的にコントローラー対応時はここを差し替え)
 		if(input_){
@@ -157,13 +161,13 @@ void GameScene::Update(){
 		Vector3 finalRot = {railRot.x + aimPitchOffset_, railRot.y + aimYawOffset_, railRot.z};
 
 		if(Camera* mainCamera = CameraManager::GetInstance()->GetCamera("default")){
-			mainCamera->SetTranslate(railPos);
+			mainCamera->SetTranslate(cameraPos);
 			mainCamera->SetRotate(finalRot);
 		}
 
 		// 追加 カメラマーカーもレール上の位置に追従させる
 		if(cameraMarker_){
-			cameraMarker_->SetTranslate(railPos);
+			cameraMarker_->SetTranslate(cameraPos);
 			cameraMarker_->SetScale({0.7f, 0.7f, 0.7f});
 			// 追加 アクティブカメラが切り替わっても正しく描画されるよう毎フレーム同期
 			if(Camera* activeCamera = CameraManager::GetInstance()->GetActiveCamera()) cameraMarker_->SetCamera(activeCamera);
@@ -186,7 +190,7 @@ void GameScene::Update(){
 		// 追加 カメラの向きを表す「鼻」マーカーを、カメラ前方ベクトルの方向に置く
 		if(cameraFacingMarker_){
 			const float kNoseOffset = 2.0f; // カメラ中心から前方にどれだけ離すか
-			Vector3 nosePos = railPos + cameraForward * kNoseOffset;
+			Vector3 nosePos = cameraPos + cameraForward * kNoseOffset;
 
 			cameraFacingMarker_->SetTranslate(nosePos);
 			cameraFacingMarker_->SetScale({0.3f, 0.3f, 0.3f}); // 本体より小さくして区別
@@ -202,7 +206,7 @@ void GameScene::Update(){
 		for(auto& target : targets_){
 			if(!target.isAlive) continue;
 
-			Vector3 toTarget = target.position - railPos;
+			Vector3 toTarget = target.position - cameraPos;
 			float distance = Length(toTarget);
 			if(distance < 0.001f) continue; // カメラと的が重なっている異常値は無視
 
