@@ -50,6 +50,11 @@ private:
 	float railT_ = 0.0f;
 	float railSpeed_ = 0.05f; // 1秒あたりの進行量(仮値、後で調整)
 
+	// 追加 三人称視点用に、カメラをレールそのものより少し上に置くオフセット(仮値、後で調整)
+	const float kCameraHeightOffset_ = 1.25f;
+	// 追加 引きのカメラにするため、進行方向の後方にも下げるオフセット(仮値、後で調整)
+	const float kCameraBackOffset_ = 4.0f;
+
 	// 追加 俯瞰デバッグカメラON/OFF状態
 	bool useDebugTopCamera_ = false;
 
