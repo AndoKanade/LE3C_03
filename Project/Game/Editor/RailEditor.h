@@ -2,6 +2,7 @@
 #include "MyMath.h"
 #include <vector>
 #include <memory>
+#include <string>
 
 // クラスの前方宣言
 class Obj3D;
@@ -38,7 +39,17 @@ public:
 	// 全制御点を囲む範囲の半径を取得
 	float GetControlPointsRadius() const;
 
+	// 追加 現在の制御点をJSONファイルに保存する
+	void SaveToJson();
+	// 追加 JSONファイルから制御点を読み込む(ファイルが無ければ何もしない)
+	void LoadFromJson();
+
 private:
+	// 追加 制御点描画用のObj3Dを1つ生成する(生成処理の共通化)
+	std::unique_ptr<Obj3D> CreatePointObject();
+	// 追加 pointObjects_の個数をcontrolPoints_に合わせる(ロードで点数が変わったとき用)
+	void SyncPointObjectsToControlPoints();
+
 	std::vector<ControlPoint> controlPoints_;         // 制御点を保存する配列
 	std::vector<std::unique_ptr<Obj3D>> pointObjects_; // 制御点描画用の3Dオブジェクト群
 	Obj3dCommon* objCommon_ = nullptr;                // 3Dオブジェクト共通設定へのポインタ

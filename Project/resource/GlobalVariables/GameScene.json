@@ -1,0 +1,11 @@
+{
+    "GameScene": {
+        "aimHitAngle": 0.10000000149011612,
+        "aimPitchLimit": 0.5,
+        "aimSpeed": 1.790000081062317,
+        "aimYawLimit": 0.6000000238418579,
+        "cameraHeightOffset": 1.25,
+        "noseOffset": 2.0,
+        "railSpeed": 0.09999999403953552
+    }
+}
