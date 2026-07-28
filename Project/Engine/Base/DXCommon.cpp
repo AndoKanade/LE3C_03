@@ -277,7 +277,7 @@ void DXCommon::PreDraw(RenderTexture* renderTexture){
 	// レンダーターゲットの設定
 	commandList->OMSetRenderTargets(1,&targetRtv,false,renderTexture?&dsvHandle:nullptr);
 
-	// 画面のクリア
+	// 画面のクリア(RenderTextureの最適化クリア値と必ず一致させること。不一致だとWARNING #820→クラッシュ)
 	float clearColor[] = {0.1f, 0.25f, 0.5f, 1.0f};
 	commandList->ClearRenderTargetView(targetRtv,clearColor,0,nullptr);
 
