@@ -50,6 +50,9 @@ private:
 	float railT_ = 0.0f;
 	float railSpeed_ = 0.05f; // 1秒あたりの進行量(仮値、後で調整)
 
+	// 追加 前フレームがPlayモードだったか(Playに入った瞬間を検出してリセットするのに使う)
+	bool wasPlayMode_ = false;
+
 	// 追加 三人称視点用に、カメラをレールそのものより少し上に置くオフセット(仮値、後で調整)
 	const float kCameraHeightOffset_ = 1.25f;
 	// 追加 引きのカメラにするため、進行方向の後方にも下げるオフセット(仮値、後で調整)
@@ -80,6 +83,8 @@ private:
 		bool isAlive = true;
 	};
 	std::vector<Target> targets_;
+	// 追加 Hierarchy/Inspectorで選択中の的のインデックス(-1は未選択)
+	int selectedTargetIndex_ = -1;
 	// 追加 照準判定の許容角度(ラジアン)。画面中央のレティクルがこの角度以内に的を捉えていればヒット
 	const float kAimHitAngle_ = 0.09f; // 約5度
 

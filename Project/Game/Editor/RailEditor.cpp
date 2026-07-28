@@ -6,10 +6,40 @@
 #include "ModelManager.h"
 #include "CameraManager.h"
 #include "Camera.h"
+#include "EditorWidgets.h"
+#include "EditorContext.h"
+#include "externals/json.hpp"
 #include <cmath>
+#include <fstream>
+#include <filesystem>
+#include <iomanip>
+
+namespace{
+	// 追加 制御点データの保存先(LevelManagerと同じくresource配下の相対パス)
+	const std::string kRailSaveFilePath = "resource/rail/rail.json";
+}
 
 RailEditor::RailEditor() = default;
 RailEditor::~RailEditor() = default;
+
+// 制御点描画用のObj3Dを1つ生成する(Initialize/追加ボタン/ロードで共通利用)
+std::unique_ptr<Obj3D> RailEditor::CreatePointObject(){
+	auto obj = std::make_unique<Obj3D>();
+	obj->Initialize(objCommon_);
+	obj->SetModel("Sphere/sphere.obj");
+	return obj;
+}
+
+// pointObjects_の個数をcontrolPoints_の個数にそろえる
+void RailEditor::SyncPointObjectsToControlPoints(){
+	// 足りなければ生成、多ければ末尾を削る
+	while(pointObjects_.size() < controlPoints_.size()){
+		pointObjects_.push_back(CreatePointObject());
+	}
+	while(pointObjects_.size() > controlPoints_.size()){
+		pointObjects_.pop_back();
+	}
+}
 
 // エディターの初期化処理
 void RailEditor::Initialize(Obj3dCommon* objCommon){
@@ -22,26 +52,26 @@ void RailEditor::Initialize(Obj3dCommon* objCommon){
 	ModelManager::GetInstance()->LoadModel("Sphere/sphere.obj");
 
 	// 最初の制御点用の3Dオブジェクトを生成
-	auto initialObj = std::make_unique<Obj3D>();
-	initialObj->Initialize(objCommon_);
-	initialObj->SetModel("Sphere/sphere.obj");
-	pointObjects_.push_back(std::move(initialObj));
+	pointObjects_.push_back(CreatePointObject());
 
 	// 追加 レール曲線可視化用のサンプリング点オブジェクトを固定数だけ生成しておく
 	curveObjects_.reserve(kCurveSampleCount);
 	for(int i = 0; i < kCurveSampleCount; ++i){
-		auto curveObj = std::make_unique<Obj3D>();
-		curveObj->Initialize(objCommon_);
-		curveObj->SetModel("Sphere/sphere.obj");
-		curveObjects_.push_back(std::move(curveObj));
+		curveObjects_.push_back(CreatePointObject());
 	}
+
+	// 追加 保存済みのJSONがあれば読み込んで初期状態を上書きする(ホットロードの起動時オート読込)
+	LoadFromJson();
 }
 
 // エディターの更新処理
 void RailEditor::Update(){
 #ifdef USE_IMGUI
-	// エディター用のImGuiウィンドウを作成
-	ImGui::Begin("Rail Editor");
+	// Playモード中はレール編集UIを出さない
+	if(EditorContext::GetInstance()->IsPlayMode()){ return; }
+
+	// 固定タイルレイアウトの左・下段に配置
+	EditorWidgets::BeginFixedPanel("Rail Editor",EditorWidgets::ComputeLayout().railEditor);
 
 	// 制御点の追加ボタン
 	if(ImGui::Button("Add Control Point")){
@@ -49,11 +79,21 @@ void RailEditor::Update(){
 		controlPoints_.push_back({{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}, 1.0f});
 
 		// 追加した制御点用の3Dオブジェクトを生成
-		auto newObj = std::make_unique<Obj3D>();
-		newObj->Initialize(objCommon_);
-		newObj->SetModel("Sphere/sphere.obj");
-		pointObjects_.push_back(std::move(newObj));
+		pointObjects_.push_back(CreatePointObject());
 	}
+
+	ImGui::Separator();
+
+	// 追加 JSONへの保存/読み込みボタン(ImGuiで編集した値をそのまま反映させる)
+	if(ImGui::Button("Save")){
+		SaveToJson();
+	}
+	ImGui::SameLine();
+	if(ImGui::Button("Load")){
+		LoadFromJson();
+	}
+	ImGui::SameLine();
+	ImGui::Text("(%s)",kRailSaveFilePath.c_str());
 
 	ImGui::Separator();
 
@@ -85,6 +125,9 @@ void RailEditor::Update(){
 
 // デバッグ用の描画処理
 void RailEditor::Draw(){
+	// Playモード中は制御点の球やレール曲線(編集用ギズモ)を隠す
+	if(EditorContext::GetInstance()->IsPlayMode()){ return; }
+
 	Camera* activeCamera = CameraManager::GetInstance()->GetActiveCamera();
 
 	// 追加 表示OFFのときは制御点のモデルを描画しない
@@ -253,4 +296,74 @@ float RailEditor::GetControlPointsRadius() const{
 	}
 
 	return std::sqrt(maxDistSq);
+}
+
+// 現在の制御点をJSONファイルに保存する
+void RailEditor::SaveToJson(){
+	// ルート要素。nameは読み込み時の簡易フォーマットチェック用
+	nlohmann::json root;
+	root["name"] = "rail";
+
+	// 各制御点を配列に詰める
+	nlohmann::json pointsJson = nlohmann::json::array();
+	for(const auto& cp : controlPoints_){
+		nlohmann::json pj;
+		pj["position"] = {cp.position.x, cp.position.y, cp.position.z};
+		pj["rotation"] = {cp.rotation.x, cp.rotation.y, cp.rotation.z};
+		pj["speed"] = cp.speed;
+		pointsJson.push_back(pj);
+	}
+	root["control_points"] = pointsJson;
+
+	// 保存先フォルダが無ければ作成しておく
+	std::filesystem::path savePath(kRailSaveFilePath);
+	if(savePath.has_parent_path()){
+		std::filesystem::create_directories(savePath.parent_path());
+	}
+
+	// ファイルへ書き出し(setwで人が読める整形出力にする)
+	std::ofstream file(kRailSaveFilePath);
+	if(!file.is_open()){
+		return;
+	}
+	file << std::setw(4) << root << std::endl;
+}
+
+// JSONファイルから制御点を読み込む(ファイルが無ければ何もしない)
+void RailEditor::LoadFromJson(){
+	std::ifstream file(kRailSaveFilePath);
+	if(!file.is_open()){
+		// ファイルがまだ無い(初回起動など)ときは初期状態のまま
+		return;
+	}
+
+	nlohmann::json root;
+	file >> root;
+
+	// 最低限のフォーマットチェック。想定外なら読み込みを中止して現状維持
+	if(!root.is_object() || !root.contains("control_points") || !root["control_points"].is_array()){
+		return;
+	}
+
+	// 読み込んだ内容で制御点を置き換える
+	controlPoints_.clear();
+	for(const auto& pj : root["control_points"]){
+		ControlPoint cp{};
+		cp.position.x = pj["position"][0].get<float>();
+		cp.position.y = pj["position"][1].get<float>();
+		cp.position.z = pj["position"][2].get<float>();
+		cp.rotation.x = pj["rotation"][0].get<float>();
+		cp.rotation.y = pj["rotation"][1].get<float>();
+		cp.rotation.z = pj["rotation"][2].get<float>();
+		cp.speed = pj["speed"].get<float>();
+		controlPoints_.push_back(cp);
+	}
+
+	// 制御点が0個だと他の処理(補間など)が破綻するので最低1点は保証する
+	if(controlPoints_.empty()){
+		controlPoints_.push_back({{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}, 1.0f});
+	}
+
+	// 描画用オブジェクトの数を制御点数に合わせる
+	SyncPointObjectsToControlPoints();
 }

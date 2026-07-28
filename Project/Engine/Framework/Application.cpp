@@ -12,6 +12,9 @@
 #include "TextureManager.h"
 #include "PostProcess.h"
 #include "RenderTexture.h"
+#include "EditorWidgets.h"
+#include "EditorContext.h"
+#include "WinAPI.h"
 
 Application* Application::instance_ = nullptr;
 
@@ -50,6 +53,8 @@ void Application::Initialize(){
 		WinAPI::kClientWidth,
 		WinAPI::kClientHeight,
 		DXGI_FORMAT_R8G8B8A8_UNORM_SRGB,
+		// 最適化クリア値は DXCommon::PreDraw のクリア色と一致させること
+		// (不一致だとD3D12デバッグレイヤーが WARNING #820 を出し、GBV有効下では例外化してクラッシュする)
 		{0.1f, 0.25f, 0.5f, 1.0f},
 		rtvHandle,
 		srvHandleCpu,
@@ -75,7 +80,7 @@ void Application::Initialize(){
 
 void Application::InitializeGameSystems(){
 	SrvManager::GetInstance()->Initialize(dxCommon_.get());
-#ifdef _DEBUG
+#ifdef USE_IMGUI
 	ImGuiManager::GetInstance()->Initialize(winApi_.get(),dxCommon_.get());
 #endif
 	SoundManager::GetInstance()->Initialize();
@@ -159,6 +164,37 @@ void Application::Draw(){
 
 	commandList->ResourceBarrier(2,barriers);
 
+	// 追加 Editモードのときは、ゲーム画面を中央「Scene」パネルの領域に合わせて描く。
+	// PostProcess::Drawはビューポートを自前で設定しないので、ここでビューポートを差し替えるだけで
+	// 全画面三角形がその矩形にマッピングされる。16:9を維持してレターボックス。
+	// Sceneパネルが無い(Playモード/非エディタ)ときは PreDraw の全画面ビューポートのまま。
+	{
+		EditorContext* ec = EditorContext::GetInstance();
+		const EditorRect& sr = ec->GetSceneViewRect();
+		if(!ec->IsPlayMode() && sr.w > 0.0f && sr.h > 0.0f){
+			const float targetAspect = static_cast<float>(WinAPI::kClientWidth) / static_cast<float>(WinAPI::kClientHeight);
+			const float rectAspect = sr.w / sr.h;
+			float vw,vh;
+			if(rectAspect > targetAspect){
+				// 領域が横長 → 高さを合わせて左右をレターボックス
+				vh = sr.h;
+				vw = vh * targetAspect;
+			} else{
+				// 領域が縦長 → 幅を合わせて上下をレターボックス
+				vw = sr.w;
+				vh = vw / targetAspect;
+			}
+			D3D12_VIEWPORT sceneViewport{};
+			sceneViewport.TopLeftX = sr.x + (sr.w - vw) * 0.5f;
+			sceneViewport.TopLeftY = sr.y + (sr.h - vh) * 0.5f;
+			sceneViewport.Width = vw;
+			sceneViewport.Height = vh;
+			sceneViewport.MinDepth = 0.0f;
+			sceneViewport.MaxDepth = 1.0f;
+			commandList->RSSetViewports(1,&sceneViewport);
+		}
+	}
+
 	// 3. ポストプロセス用テクスチャ切り替え (Dissolve対応)
 	D3D12_GPU_DESCRIPTOR_HANDLE secondarySRV = dxCommon_->GetDepthSrvHandleGpu();
 	if(currentPPType_ == PostProcess::Type::Dissolve){
@@ -178,7 +214,7 @@ void Application::Draw(){
 	commandList->ResourceBarrier(2,barriers);
 
 	// 4. UI描画 (ImGui)
-#ifdef _DEBUG
+#ifdef USE_IMGUI
 	ImGuiManager::GetInstance()->Draw();
 #endif
 
@@ -190,8 +226,9 @@ void Application::Draw(){
 // デバッグUI表示
 // -------------------------------------------------
 void Application::ShowPostProcessUI(){
-#ifdef _DEBUG
-	ImGui::Begin("PostProcess Settings");
+#ifdef USE_IMGUI
+	// 固定タイルレイアウトの下段・右に配置
+	EditorWidgets::BeginFixedPanel("PostProcess Settings",EditorWidgets::ComputeLayout().bottomRight);
 
 	const char* typeNames[] = {"Default", "BoxFilter", "Grayscale", "Vignette", "GaussianBlur", "LuminanceOutline", "DepthOutline", "RadialBlur", "Dissolve", "Random", "Glitch"};
 	int currentIdx = static_cast<int>(currentPPType_);
