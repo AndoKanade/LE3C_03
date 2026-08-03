@@ -34,6 +34,10 @@ public:
 	// レール上の正規化された進行方向を取得 (t: 0〜1)
 	Vector3 GetForwardOnRail(float t) const;
 
+	// 変更箇所: ImGui無し(Release等)でもキー操作で表示切り替えができるようにする
+	void ToggleShowControlPointModels(){ showControlPointModels_ = !showControlPointModels_; }
+	void ToggleShowCurve(){ showCurve_ = !showCurve_; }
+
 	// 全制御点の中心座標を取得
 	Vector3 GetControlPointsCenter() const;
 	// 全制御点を囲む範囲の半径を取得
