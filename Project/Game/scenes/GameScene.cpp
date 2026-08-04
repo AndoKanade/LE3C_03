@@ -288,6 +288,59 @@ void GameScene::Update(){
 	// 追加 俯瞰デバッグカメラON中は、制御点全体を囲むように自動でフィットさせる
 	// (チェックボックスON時の一度きりの処理に変更。GameScene::Updateの下部ImGuiブロックへ移動済み)
 
+	// 変更箇所: ImGuiが無いRelease等でもレールの制御点を確認できるよう、F1キーで俯瞰デバッグカメラを切り替える
+	if(input_ && input_->TriggerKey(DIK_F1)){
+		useDebugTopCamera_ = !useDebugTopCamera_;
+		Camera* switchedCamera = CameraManager::GetInstance()->GetCamera(useDebugTopCamera_?"debug_top":"default");
+		CameraManager::GetInstance()->SetActiveCamera(useDebugTopCamera_?"debug_top":"default");
+		// 変更箇所: SetCamera()を毎フレーム呼んでいないフェンスや地面等のオブジェクトは
+		// object3dCommon_のdefaultCamera_を参照し続けるため、こちらも切り替えないと追従しない
+		if(switchedCamera && object3dCommon_) object3dCommon_->SetDefaultCamera(switchedCamera);
+
+		// ONにした瞬間だけ、制御点全体を囲むように自動フィットさせる(ImGui版のチェックボックスと同じ処理)
+		if(useDebugTopCamera_ && railEditor_){
+			Vector3 center = railEditor_->GetControlPointsCenter();
+			float radius = railEditor_->GetControlPointsRadius();
+
+			constexpr float kMinHeight = 10.0f;
+			constexpr float kMarginFactor = 2.2f; // 画角に対する余白の目安(仮値)
+			float height = radius * kMarginFactor + kMinHeight;
+
+			if(Camera* debugTopCamera = CameraManager::GetInstance()->GetCamera("debug_top")){
+				debugTopCamera->SetTranslate({center.x, height, center.z});
+				debugTopCamera->SetRotate({3.14159265f * 0.5f, 0.0f, 0.0f});
+			}
+		}
+	}
+
+	// 変更箇所: ImGuiが無いRelease等でも表示切り替えができるよう、キー操作で各種デバッグ表示をトグルする
+	if(input_ && input_->TriggerKey(DIK_F3)){
+		showCameraDebugMarkers_ = !showCameraDebugMarkers_;
+	}
+	if(input_ && input_->TriggerKey(DIK_F4) && railEditor_){
+		railEditor_->ToggleShowControlPointModels();
+	}
+	if(input_ && input_->TriggerKey(DIK_F5) && railEditor_){
+		railEditor_->ToggleShowCurve();
+	}
+
+	// 変更箇所: 俯瞰デバッグカメラが有効な間は、ImGui無しでもWASD(平面移動)+QE(高さ)で自由に動かせるようにする
+	if(useDebugTopCamera_ && input_){
+		if(Camera* debugTopCamera = CameraManager::GetInstance()->GetCamera("debug_top")){
+			constexpr float kDebugCameraMoveSpeed = 10.0f; // 1秒あたりの移動量(仮値)
+			const float moveDelta = kDebugCameraMoveSpeed * (1.0f / 60.0f);
+
+			Vector3 debugCameraPos = debugTopCamera->GetTranslate();
+			if(input_->PushKey(DIK_W)) debugCameraPos.z += moveDelta;
+			if(input_->PushKey(DIK_S)) debugCameraPos.z -= moveDelta;
+			if(input_->PushKey(DIK_A)) debugCameraPos.x -= moveDelta;
+			if(input_->PushKey(DIK_D)) debugCameraPos.x += moveDelta;
+			if(input_->PushKey(DIK_E)) debugCameraPos.y += moveDelta;
+			if(input_->PushKey(DIK_Q)) debugCameraPos.y -= moveDelta;
+			debugTopCamera->SetTranslate(debugCameraPos);
+		}
+	}
+
 #ifdef USE_IMGUI
 	// Playモード中は編集用パネルをすべて隠す(クリーンな実行画面にするため)
 	if(EditorContext::GetInstance()->IsPlayMode()){
