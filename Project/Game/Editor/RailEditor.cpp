@@ -17,6 +17,8 @@
 namespace{
 	// 追加 制御点データの保存先(LevelManagerと同じくresource配下の相対パス)
 	const std::string kRailSaveFilePath = "resource/rail/rail.json";
+	// 追加 制御点リセット用のデフォルト値(初期制御点/Add Control Pointボタンと同じ初期値)
+	constexpr RailEditor::ControlPoint kDefaultControlPoint = {{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}, 1.0f};
 }
 
 RailEditor::RailEditor() = default;
@@ -104,6 +106,9 @@ void RailEditor::Update(){
 
 	ImGui::Separator();
 
+	// 追加 削除ボタンが押された制御点のインデックス(未押下なら-1のまま)
+	int deleteIndex = -1;
+
 	// 各制御点の編集UI
 	for(size_t i = 0; i < controlPoints_.size(); ++i){
 		// IDの重複を防ぐためPushIDを使用
@@ -115,8 +120,29 @@ void RailEditor::Update(){
 		ImGui::DragFloat3("Rotation",&controlPoints_[i].rotation.x,0.1f);
 		ImGui::DragFloat("Speed",&controlPoints_[i].speed,0.1f);
 
+		// 追加 制御点のパラメータをデフォルト値に戻すボタン
+		if(ImGui::Button("Reset")){
+			controlPoints_[i] = kDefaultControlPoint;
+		}
+		ImGui::SameLine();
+
+		// 追加 制御点の削除ボタン(最低1点は残す必要があるため、1点しかないときは押せないようにする)
+		bool isOnlyPoint = (controlPoints_.size() <= 1);
+		ImGui::BeginDisabled(isOnlyPoint);
+		if(ImGui::Button("Delete")){
+			deleteIndex = static_cast<int>(i);
+		}
+		ImGui::EndDisabled();
+
 		ImGui::Separator();
 		ImGui::PopID();
+	}
+
+	// 追加 ループ中の削除はイテレータを壊すため、ループを抜けてから実行する
+	if(deleteIndex >= 0){
+		controlPoints_.erase(controlPoints_.begin() + deleteIndex);
+		// pointObjects_の個数もcontrolPoints_に合わせる(以降Draw()でインデックスがずれないようにする)
+		SyncPointObjectsToControlPoints();
 	}
 
 	ImGui::End();

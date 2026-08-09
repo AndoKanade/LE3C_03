@@ -59,6 +59,12 @@ void GameScene::Initialize(Obj3dCommon* object3dCommon,Input* input,SpriteCommon
 	railEditor_ = std::make_unique<RailEditor>();
 	railEditor_->Initialize(object3dCommon_);
 
+	// 追加 プレイヤー(人型モデル)の読み込みと生成
+	ModelManager::GetInstance()->LoadModel("human/walk.gltf");
+	player_ = std::make_unique<Obj3D>();
+	player_->Initialize(object3dCommon_);
+	player_->SetModel("human/walk.gltf");
+
 	// 追加 調整項目(GlobalVariables)にゲームプレイ用パラメータを登録
 	// ImGuiの "Global Variables" ウィンドウから実行中に編集・保存でき、
 	// resource/GlobalVariables/GameScene.json を外部で書き換えると自動反映される(ホットリロード)
@@ -95,14 +101,22 @@ void GameScene::Initialize(Obj3dCommon* object3dCommon,Input* input,SpriteCommon
 	cameraFacingMarker_->Initialize(object3dCommon_);
 	cameraFacingMarker_->SetModel("Sphere/sphere.obj");
 
-	// 追加 テスト用の的をレール沿いに仮配置(あとでレベルデータ化する想定)
-	{
-		std::vector<Vector3> testPositions = {
-			{2.0f, 0.0f, 8.0f},
-			{-2.0f, 1.0f, 17.0f},
-			{0.0f, -1.0f, 24.0f},
-		};
-		for(const auto& pos : testPositions){
+	// 変更 的をレール沿いの複数の進行度(t)に、左右・上下へオフセットして配置(ゲームらしく散らばらせる)
+	if(railEditor_){
+		constexpr float kTargetRailT[] = {0.1f, 0.25f, 0.4f, 0.55f, 0.7f, 0.85f};
+		constexpr float kTargetSideOffset[] = {-3.0f, 3.0f, -2.0f, 2.0f, -3.0f, 3.0f};
+		constexpr float kTargetUpOffset[] = {1.0f, 2.0f, 3.0f, 1.5f, 2.5f, 1.0f};
+		constexpr size_t kTargetCount = 6;
+		constexpr Vector3 kWorldUp = {0.0f, 1.0f, 0.0f};
+
+		for(size_t i = 0; i < kTargetCount; ++i){
+			// レール上の基準位置と進行方向から、進行方向に対して直角な「右」方向を求める
+			Vector3 basePos = railEditor_->GetPositionOnRail(kTargetRailT[i]);
+			Vector3 forward = railEditor_->GetForwardOnRail(kTargetRailT[i]);
+			Vector3 right = Normalize(Cross(kWorldUp,forward));
+
+			Vector3 pos = basePos + right * kTargetSideOffset[i] + kWorldUp * kTargetUpOffset[i];
+
 			Target target;
 			target.obj = std::make_unique<Obj3D>();
 			target.obj->Initialize(object3dCommon_);
@@ -247,6 +261,19 @@ void GameScene::Update(){
 			cameraFacingMarker_->SetScale({0.3f, 0.3f, 0.3f}); // 本体より小さくして区別
 			if(Camera* activeCamera = CameraManager::GetInstance()->GetActiveCamera()) cameraFacingMarker_->SetCamera(activeCamera);
 			cameraFacingMarker_->Update();
+		}
+
+		// 追加 プレイヤー(人型モデル)をカメラの前方下(レール上)に配置し、進行方向(レールの向き)を向かせる
+		// (カメラは進行方向を向いているため、プレイヤーは前方に置かないと視界に入らない)
+		if(player_){
+			Vector3 playerPos = railPos + cameraForward * kCameraBackOffset_;
+			playerPos.y -= kPlayerDownOffset_; // 追加 スプラトゥーン風に、レール位置よりさらに下に表示する
+
+			player_->SetTranslate(playerPos);
+			player_->SetRotate(railRot);
+			player_->SetScale({kPlayerScale_, kPlayerScale_, kPlayerScale_}); // 追加 小さめのスケールで表示
+			if(Camera* activeCamera = CameraManager::GetInstance()->GetActiveCamera()) player_->SetCamera(activeCamera);
+			player_->Update();
 		}
 
 		// 追加 的の当たり判定と射撃処理(画面中央固定のレティクル方式)
@@ -444,6 +471,9 @@ void GameScene::Draw(){
 
 	// 変更 レールエディターの描画を追加しました
 	if(railEditor_) railEditor_->Draw();
+
+	// 追加 プレイヤー(人型モデル)を描画
+	if(player_) player_->Draw();
 
 	// 追加 カメラ位置・向きのデバッグマーカーを描画(ON/OFF切り替え可能)
 	// Playモード中はギズモとして隠す(実行画面には出さない)
