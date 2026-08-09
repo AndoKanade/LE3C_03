@@ -20,13 +20,13 @@
 #include "EditorContext.h"
 #include <cstdio>
 
-// 変更 レールエディターをインクルードしました
+// レールエディター
 #include "Editor/RailEditor.h"
 
 namespace{
 	// スカイボックスのテクスチャパス
 	const std::string kSkyboxTexture = "resource/Skybox/rostock_laage_airport_4k.dds";
-	// 追加 GlobalVariablesのグループ名(GameSceneの調整項目)
+	// GlobalVariablesのグループ名(GameSceneの調整項目)
 	const char* kGameSceneGroup = "GameScene";
 }
 
@@ -55,17 +55,17 @@ void GameScene::Initialize(Obj3dCommon* object3dCommon,Input* input,SpriteCommon
 	skybox_ = std::make_unique<Skybox>();
 	skybox_->Initialize(skyboxCommon_.get(),kSkyboxTexture);
 
-	// 変更 レールエディターの生成と初期化を追加しました
+	// レールエディターの生成と初期化
 	railEditor_ = std::make_unique<RailEditor>();
 	railEditor_->Initialize(object3dCommon_);
 
-	// 追加 プレイヤー(人型モデル)の読み込みと生成
+	// プレイヤー(人型モデル)の読み込みと生成
 	ModelManager::GetInstance()->LoadModel("human/walk.gltf");
 	player_ = std::make_unique<Obj3D>();
 	player_->Initialize(object3dCommon_);
 	player_->SetModel("human/walk.gltf");
 
-	// 追加 調整項目(GlobalVariables)にゲームプレイ用パラメータを登録
+	// 調整項目(GlobalVariables)にゲームプレイ用パラメータを登録
 	// ImGuiの "Global Variables" ウィンドウから実行中に編集・保存でき、
 	// resource/GlobalVariables/GameScene.json を外部で書き換えると自動反映される(ホットリロード)
 	{
@@ -75,33 +75,32 @@ void GameScene::Initialize(Obj3dCommon* object3dCommon,Input* input,SpriteCommon
 		gv->AddItem(kGameSceneGroup,"railSpeed",railSpeed_);
 		gv->AddItem(kGameSceneGroup,"cameraHeightOffset",kCameraHeightOffset_);
 		// 照準(エイム)まわりの手触り調整用パラメータ
-		gv->AddItem(kGameSceneGroup,"aimSpeed",kAimSpeed_);           // 1秒あたりの回転量(ラジアン)
-		gv->AddItem(kGameSceneGroup,"aimYawLimit",kAimYawLimit_);     // 左右の可動範囲
-		gv->AddItem(kGameSceneGroup,"aimPitchLimit",kAimPitchLimit_); // 上下の可動範囲
-		gv->AddItem(kGameSceneGroup,"aimHitAngle",kAimHitAngle_);     // ヒット判定の許容角度
-		gv->AddItem(kGameSceneGroup,"noseOffset",2.0f);              // 向きマーカーを前方に離す距離
+		gv->AddItem(kGameSceneGroup,"aimSpeed",kAimSpeed_);             // 1秒あたりの回転量(ラジアン)
+		gv->AddItem(kGameSceneGroup,"aimYawLimit",kAimYawLimit_);       // 左右の可動範囲
+		gv->AddItem(kGameSceneGroup,"aimPitchLimit",kAimPitchLimit_);   // 上下の可動範囲
+		gv->AddItem(kGameSceneGroup,"aimHitAngle",kAimHitAngle_);       // ヒット判定の許容角度
+		gv->AddItem(kGameSceneGroup,"noseOffset",2.0f);                 // 向きマーカーを前方に離す距離
 	}
 
-	// 追加 俯瞰用のデバッグカメラを生成
+	// 俯瞰用のデバッグカメラを生成
 	CameraManager::GetInstance()->CreateCamera("debug_top",object3dCommon_->GetDxCommon()->GetDevice());
 	auto* debugTopCamera = CameraManager::GetInstance()->GetCamera("debug_top");
 	// 真上から見下ろす位置に配置(X回転90度=pi/2で真下向き)
 	debugTopCamera->SetTranslate({0.0f, 30.0f, 0.0f});
 	debugTopCamera->SetRotate({3.14159265f * 0.5f, 0.0f, 0.0f});
 
-	// 追加 カメラ位置を可視化するマーカーを生成
+	// カメラ位置を可視化するマーカーを生成
 	ModelManager::GetInstance()->LoadModel("Sphere/sphere.obj");
 	cameraMarker_ = std::make_unique<Obj3D>();
 	cameraMarker_->Initialize(object3dCommon_);
 	cameraMarker_->SetModel("Sphere/sphere.obj");
 
-
-	// 追加 カメラの向きを可視化する小さいマーカーを生成
+	// カメラの向きを可視化する小さいマーカーを生成
 	cameraFacingMarker_ = std::make_unique<Obj3D>();
 	cameraFacingMarker_->Initialize(object3dCommon_);
 	cameraFacingMarker_->SetModel("Sphere/sphere.obj");
 
-	// 変更 的をレール沿いの複数の進行度(t)に、左右・上下へオフセットして配置(ゲームらしく散らばらせる)
+	// 的をレール沿いの複数の進行度(t)に、左右・上下へオフセットして配置(ゲームらしく散らばらせる)
 	if(railEditor_){
 		constexpr float kTargetRailT[] = {0.1f, 0.25f, 0.4f, 0.55f, 0.7f, 0.85f};
 		constexpr float kTargetSideOffset[] = {-3.0f, 3.0f, -2.0f, 2.0f, -3.0f, 3.0f};
@@ -127,7 +126,7 @@ void GameScene::Initialize(Obj3dCommon* object3dCommon,Input* input,SpriteCommon
 		}
 	}
 
-	// 追加 画面中央固定のレティクルを生成(外枠+中心ドットの2枚構成)
+	// 画面中央固定のレティクルを生成(外枠+中心ドットの2枚構成)
 	TextureManager::GetInstance()->LoadTexture("resource/Reticle/reticleOutline.png");
 	TextureManager::GetInstance()->LoadTexture("resource/Reticle/reticle.png");
 
@@ -156,18 +155,22 @@ void GameScene::Finalize(){}
 // シーンの更新処理
 void GameScene::Update(){
 	// スカイボックスの更新
-	if(skybox_) skybox_->Update(*CameraManager::GetInstance()->GetActiveCamera());
+	if(skybox_){
+		skybox_->Update(*CameraManager::GetInstance()->GetActiveCamera());
+	}
 
-	// 追加 レティクル(画面中央固定なので位置は変わらないが、内部行列更新のため毎フレーム呼ぶ)
+	// レティクルの更新(画面中央固定なので位置は変わらないが、内部行列更新のため毎フレーム呼ぶ)
 	if(reticleOutlineSprite_) reticleOutlineSprite_->Update();
 	if(reticleCenterSprite_) reticleCenterSprite_->Update();
 
-	// 変更 レールエディターの更新を追加しました
-	if(railEditor_) railEditor_->Update();
-
-	// 追加 レール進行度を時間で進めて、カメラをレール上に乗せる
+	// レールエディターの更新
 	if(railEditor_){
-		// 追加 調整項目から最新の値を取得(ImGui編集/ホットリロードが即反映される)
+		railEditor_->Update();
+	}
+
+	// レール進行度を時間で進めて、カメラをレール上に乗せる
+	if(railEditor_){
+		// 調整項目から最新の値を取得(ImGui編集/ホットリロードが即反映される)
 		GlobalVariables* gv = GlobalVariables::GetInstance();
 		railSpeed_ = gv->GetFloatValue(kGameSceneGroup,"railSpeed");
 		float cameraHeightOffset = gv->GetFloatValue(kGameSceneGroup,"cameraHeightOffset");
@@ -188,27 +191,34 @@ void GameScene::Update(){
 		// これでPlayを押すとレール先頭=編集で見えていた画から始まる。
 		if(isPlayMode && !wasPlayMode_){
 			railT_ = 0.0f;
+			isRailFinished_ = false; // レール終端フラグもリセットする
 			aimYawOffset_ = 0.0f;
 			aimPitchOffset_ = 0.0f;
-			for(auto& t : targets_){ t.isAlive = true; }
+			for(auto& t : targets_){
+				t.isAlive = true;
+			}
 		}
 		wasPlayMode_ = isPlayMode;
 
-		// レール進行はPlayモードのときだけ進める(Edit中はその位置で静止)
-		if(isPlayMode){
-			railT_ += railSpeed_ * deltaTime;
-			if(railT_ > 1.0f) railT_ -= 1.0f; // ひとまずループさせる(後で終端で止める形に変更予定)
+		// レール進行はPlayモードかつ終端未到達のときだけ進める(Edit中はその位置で静止)
+		// 終端に到達したらループさせず、その場で停止させる
+		if(isPlayMode && !isRailFinished_){
+			// 現在位置に対応する制御点のSpeed値を取得し、全体速度(railSpeed_)に掛けて反映する
+			float pointSpeed = railEditor_->GetSpeedOnRail(railT_);
+			railT_ += pointSpeed * railSpeed_ * deltaTime;
+			if(railT_ >= 1.0f){
+				railT_ = 1.0f; // 終端で固定する
+				isRailFinished_ = true;
+			}
 		}
 
 		Vector3 railPos = railEditor_->GetPositionOnRail(railT_);
 		Vector3 railRot = railEditor_->GetRotationOnRail(railT_);
 
-		// 追加 三人称視点用に、カメラの実位置はレールそのものではなく少し上に置く
-		// (レール上に直接カメラがあると、キャラクター視点っぽくなり三人称の見た目として不自然なため)
+		// 三人称視点用に、カメラの実位置はレールそのものではなく少し上に置く
 		Vector3 cameraPos = railPos + Vector3{0.0f, cameraHeightOffset, 0.0f};
 
-		// 追加 プレイヤー入力で照準(カメラの向き)をレールの向きに上乗せする
-		// 現状エンジンにキーボード入力しかないため、矢印キーで操作(将来的にコントローラー対応時はここを差し替え)
+		// プレイヤー入力で照準(カメラの向き)をレールの向きに上乗せする
 		// Edit中は入力を受け付けない(ゲームは静止)
 		if(isPlayMode && input_){
 			if(input_->PushKey(DIK_LEFT))  aimYawOffset_ -= aimSpeed * deltaTime;
@@ -231,16 +241,18 @@ void GameScene::Update(){
 			mainCamera->SetRotate(finalRot);
 		}
 
-		// 追加 カメラマーカーもレール上の位置に追従させる
+		// カメラマーカーもレール上の位置に追従させる
 		if(cameraMarker_){
 			cameraMarker_->SetTranslate(cameraPos);
 			cameraMarker_->SetScale({0.7f, 0.7f, 0.7f});
-			// 追加 アクティブカメラが切り替わっても正しく描画されるよう毎フレーム同期
-			if(Camera* activeCamera = CameraManager::GetInstance()->GetActiveCamera()) cameraMarker_->SetCamera(activeCamera);
+			// アクティブカメラが切り替わっても正しく描画されるよう毎フレーム同期
+			if(Camera* activeCamera = CameraManager::GetInstance()->GetActiveCamera()){
+				cameraMarker_->SetCamera(activeCamera);
+			}
 			cameraMarker_->Update();
 		}
 
-		// 追加 カメラの前方ベクトルを計算(finalRotベースの回転行列を適用)
+		// カメラの前方ベクトルを計算(finalRotベースの回転行列を適用)
 		Matrix4x4 rotateX = MakeRotateXMatrix(finalRot.x);
 		Matrix4x4 rotateY = MakeRotateYMatrix(finalRot.y);
 		Matrix4x4 rotateZ = MakeRotateZMatrix(finalRot.z);
@@ -253,34 +265,37 @@ void GameScene::Update(){
 			baseForward.x * rotateMatrix.m[0][2] + baseForward.y * rotateMatrix.m[1][2] + baseForward.z * rotateMatrix.m[2][2]
 		};
 
-		// 追加 カメラの向きを表す「鼻」マーカーを、カメラ前方ベクトルの方向に置く
+		// カメラの向きを表す「鼻」マーカーを、カメラ前方ベクトルの方向に置く
 		if(cameraFacingMarker_){
 			Vector3 nosePos = cameraPos + cameraForward * noseOffset;
 
 			cameraFacingMarker_->SetTranslate(nosePos);
 			cameraFacingMarker_->SetScale({0.3f, 0.3f, 0.3f}); // 本体より小さくして区別
-			if(Camera* activeCamera = CameraManager::GetInstance()->GetActiveCamera()) cameraFacingMarker_->SetCamera(activeCamera);
+			if(Camera* activeCamera = CameraManager::GetInstance()->GetActiveCamera()){
+				cameraFacingMarker_->SetCamera(activeCamera);
+			}
 			cameraFacingMarker_->Update();
 		}
 
-		// 追加 プレイヤー(人型モデル)をカメラの前方下(レール上)に配置し、進行方向(レールの向き)を向かせる
-		// (カメラは進行方向を向いているため、プレイヤーは前方に置かないと視界に入らない)
+		// プレイヤー(人型モデル)をカメラの前方下(レール上)に配置し、進行方向(レールの向き)を向かせる
 		if(player_){
 			Vector3 playerPos = railPos + cameraForward * kCameraBackOffset_;
-			playerPos.y -= kPlayerDownOffset_; // 追加 スプラトゥーン風に、レール位置よりさらに下に表示する
+			playerPos.y -= kPlayerDownOffset_; // スプラトゥーン風に、レール位置よりさらに下に表示する
 
 			player_->SetTranslate(playerPos);
 			player_->SetRotate(railRot);
-			player_->SetScale({kPlayerScale_, kPlayerScale_, kPlayerScale_}); // 追加 小さめのスケールで表示
-			if(Camera* activeCamera = CameraManager::GetInstance()->GetActiveCamera()) player_->SetCamera(activeCamera);
+			player_->SetScale({kPlayerScale_, kPlayerScale_, kPlayerScale_}); // 小さめのスケールで表示
+			if(Camera* activeCamera = CameraManager::GetInstance()->GetActiveCamera()){
+				player_->SetCamera(activeCamera);
+			}
 			player_->Update();
 		}
 
-		// 追加 的の当たり判定と射撃処理(画面中央固定のレティクル方式)
+		// 的の当たり判定と射撃処理(画面中央固定のレティクル方式)
 		// レティクルは常に画面中央=カメラの前方ベクトル方向なので、
 		// 「カメラ→的」の方向とカメラ前方ベクトルのなす角が閾値以内なら狙えている
 		bool shootPressed = isPlayMode && input_ && input_->PushKey(DIK_SPACE);
-		bool isAimingAtAnyTarget = false; // 追加 レティクル中心の色変えに使う
+		bool isAimingAtAnyTarget = false; // レティクル中心の色変えに使う
 		for(auto& target : targets_){
 			if(!target.isAlive) continue;
 
@@ -290,7 +305,9 @@ void GameScene::Update(){
 
 			float angle = AngleBetween(cameraForward,toTarget);
 			bool isAimed = angle <= aimHitAngle;
-			if(isAimed) isAimingAtAnyTarget = true;
+			if(isAimed){
+				isAimingAtAnyTarget = true;
+			}
 
 			if(shootPressed && isAimed){
 				target.isAlive = false;
@@ -298,33 +315,34 @@ void GameScene::Update(){
 
 			if(target.obj){
 				target.obj->SetTranslate(target.position);
-				// 狙えているときは少し大きくして視覚的にフィードバック(仮の演出)
+				// 狙えているときは少し大きくして視覚的にフィードバック
 				float scale = isAimed?0.6f:0.4f;
 				target.obj->SetScale({scale, scale, scale});
-				if(Camera* activeCamera = CameraManager::GetInstance()->GetActiveCamera()) target.obj->SetCamera(activeCamera);
+				if(Camera* activeCamera = CameraManager::GetInstance()->GetActiveCamera()){
+					target.obj->SetCamera(activeCamera);
+				}
 				target.obj->Update();
 			}
 		}
 
-		// 追加 狙えているときはレティクル中心を赤く、それ以外は白のままにする
+		// 狙えているときはレティクル中心を赤く、それ以外は白のままにする
 		if(reticleCenterSprite_){
 			reticleCenterSprite_->SetColor(isAimingAtAnyTarget?Vector4{1.0f, 0.2f, 0.2f, 1.0f}:Vector4{1.0f, 1.0f, 1.0f, 1.0f});
 		}
 	}
 
-	// 追加 俯瞰デバッグカメラON中は、制御点全体を囲むように自動でフィットさせる
-	// (チェックボックスON時の一度きりの処理に変更。GameScene::Updateの下部ImGuiブロックへ移動済み)
-
-	// 変更箇所: ImGuiが無いRelease等でもレールの制御点を確認できるよう、F1キーで俯瞰デバッグカメラを切り替える
+	// ImGuiが無い環境でもレールの制御点を確認できるよう、F1キーで俯瞰デバッグカメラを切り替える
 	if(input_ && input_->TriggerKey(DIK_F1)){
 		useDebugTopCamera_ = !useDebugTopCamera_;
 		Camera* switchedCamera = CameraManager::GetInstance()->GetCamera(useDebugTopCamera_?"debug_top":"default");
 		CameraManager::GetInstance()->SetActiveCamera(useDebugTopCamera_?"debug_top":"default");
-		// 変更箇所: SetCamera()を毎フレーム呼んでいないフェンスや地面等のオブジェクトは
+		// SetCamera()を毎フレーム呼んでいないフェンスや地面等のオブジェクトは
 		// object3dCommon_のdefaultCamera_を参照し続けるため、こちらも切り替えないと追従しない
-		if(switchedCamera && object3dCommon_) object3dCommon_->SetDefaultCamera(switchedCamera);
+		if(switchedCamera && object3dCommon_){
+			object3dCommon_->SetDefaultCamera(switchedCamera);
+		}
 
-		// ONにした瞬間だけ、制御点全体を囲むように自動フィットさせる(ImGui版のチェックボックスと同じ処理)
+		// ONにした瞬間だけ、制御点全体を囲むように自動フィットさせる
 		if(useDebugTopCamera_ && railEditor_){
 			Vector3 center = railEditor_->GetControlPointsCenter();
 			float radius = railEditor_->GetControlPointsRadius();
@@ -340,7 +358,7 @@ void GameScene::Update(){
 		}
 	}
 
-	// 変更箇所: ImGuiが無いRelease等でも表示切り替えができるよう、キー操作で各種デバッグ表示をトグルする
+	// ImGuiが無い環境でも表示切り替えができるよう、キー操作で各種デバッグ表示をトグルする
 	if(input_ && input_->TriggerKey(DIK_F3)){
 		showCameraDebugMarkers_ = !showCameraDebugMarkers_;
 	}
@@ -351,10 +369,10 @@ void GameScene::Update(){
 		railEditor_->ToggleShowCurve();
 	}
 
-	// 変更箇所: 俯瞰デバッグカメラが有効な間は、ImGui無しでもWASD(平面移動)+QE(高さ)で自由に動かせるようにする
+	// 俯瞰デバッグカメラが有効な間は、ImGui無しでもWASD(平面移動)+QE(高さ)で自由に動かせるようにする
 	if(useDebugTopCamera_ && input_){
 		if(Camera* debugTopCamera = CameraManager::GetInstance()->GetCamera("debug_top")){
-			constexpr float kDebugCameraMoveSpeed = 10.0f; // 1秒あたりの移動量(仮値)
+			constexpr float kDebugCameraMoveSpeed = 10.0f; // 1秒あたりの移動量
 			const float moveDelta = kDebugCameraMoveSpeed * (1.0f / 60.0f);
 
 			Vector3 debugCameraPos = debugTopCamera->GetTranslate();
@@ -380,12 +398,16 @@ void GameScene::Update(){
 		// カメラ設定のUI
 		if(ImGui::CollapsingHeader("Camera Settings")){
 			Vector3 camPos = activeCamera->GetTranslate();
-			if(ImGui::DragFloat3("Camera Pos",&camPos.x,0.1f)) activeCamera->SetTranslate(camPos);
+			if(ImGui::DragFloat3("Camera Pos",&camPos.x,0.1f)){
+				activeCamera->SetTranslate(camPos);
+			}
 
 			Vector3 camRot = activeCamera->GetRotate();
-			if(ImGui::DragFloat3("Camera Rotate",&camRot.x,0.01f)) activeCamera->SetRotate(camRot);
+			if(ImGui::DragFloat3("Camera Rotate",&camRot.x,0.01f)){
+				activeCamera->SetRotate(camRot);
+			}
 
-			// 変更 俯瞰デバッグカメラの切り替えボタン(ONにした瞬間だけ制御点全体にフィットさせる)
+			// 俯瞰デバッグカメラの切り替えボタン(ONにした瞬間だけ制御点全体にフィットさせる)
 			if(ImGui::Checkbox("Debug Top-Down View",&useDebugTopCamera_)){
 				CameraManager::GetInstance()->SetActiveCamera(useDebugTopCamera_?"debug_top":"default");
 
@@ -395,7 +417,7 @@ void GameScene::Update(){
 					float radius = railEditor_->GetControlPointsRadius();
 
 					const float kMinHeight = 10.0f;
-					const float kMarginFactor = 2.2f; // 画角に対する余白の目安(仮値)
+					const float kMarginFactor = 2.2f; // 画角に対する余白の目安
 					float height = radius * kMarginFactor + kMinHeight;
 
 					if(Camera* debugTopCamera = CameraManager::GetInstance()->GetCamera("debug_top")){
@@ -405,7 +427,7 @@ void GameScene::Update(){
 				}
 			}
 
-			// 追加 メインカメラの位置・向きマーカーの表示ON/OFF切り替え
+			// メインカメラの位置・向きマーカーの表示ON/OFF切り替え
 			ImGui::Checkbox("Show Main Camera Markers",&showCameraDebugMarkers_);
 		}
 
@@ -428,8 +450,8 @@ void GameScene::Update(){
 
 		Application::GetInstance()->ShowPostProcessUI();
 
-		// 追加 シーン階層(Hierarchy)+ Inspector の最小版
-		// Unity/Unreal風の「一覧から選択 → Inspectorで編集」フロー。まずは的(targets)を対象にする
+		// シーン階層(Hierarchy)の最小版
+		// Unity/Unreal風の「一覧から選択 → Inspectorで編集」フロー
 		// 左・上段に配置
 		EditorWidgets::BeginFixedPanel("Hierarchy",L.hierarchy);
 		ImGui::Text("Targets: %d",static_cast<int>(targets_.size()));
@@ -447,6 +469,7 @@ void GameScene::Update(){
 		}
 		ImGui::End();
 
+		// Inspectorの最小版
 		// 右・上段に配置
 		EditorWidgets::BeginFixedPanel("Inspector",L.inspector);
 		if(selectedTargetIndex_ >= 0 && selectedTargetIndex_ < static_cast<int>(targets_.size())){
@@ -469,25 +492,31 @@ void GameScene::Update(){
 void GameScene::Draw(){
 	object3dCommon_->Draw();
 
-	// 変更 レールエディターの描画を追加しました
-	if(railEditor_) railEditor_->Draw();
+	// レールエディターの描画
+	if(railEditor_){
+		railEditor_->Draw();
+	}
 
-	// 追加 プレイヤー(人型モデル)を描画
-	if(player_) player_->Draw();
+	// プレイヤー(人型モデル)を描画
+	if(player_){
+		player_->Draw();
+	}
 
-	// 追加 カメラ位置・向きのデバッグマーカーを描画(ON/OFF切り替え可能)
+	// カメラ位置・向きのデバッグマーカーを描画(ON/OFF切り替え可能)
 	// Playモード中はギズモとして隠す(実行画面には出さない)
 	if(showCameraDebugMarkers_ && !EditorContext::GetInstance()->IsPlayMode()){
 		if(cameraMarker_) cameraMarker_->Draw();
 		if(cameraFacingMarker_) cameraFacingMarker_->Draw();
 	}
 
-	// 追加 生存している的だけ描画
+	// 生存している的だけ描画
 	for(auto& target : targets_){
-		if(target.isAlive && target.obj) target.obj->Draw();
+		if(target.isAlive && target.obj){
+			target.obj->Draw();
+		}
 	}
 
-	// 追加 画面中央固定のレティクルを描画(2D描画のため、SpriteCommonの描画前処理を先に呼ぶ)
+	// 画面中央固定のレティクルを描画(2D描画のため、SpriteCommonの描画前処理を先に呼ぶ)
 	if((reticleOutlineSprite_ || reticleCenterSprite_) && spriteCommon_){
 		spriteCommon_->Draw(); // 描画前処理
 		if(reticleOutlineSprite_) reticleOutlineSprite_->Draw(); // 外枠を先に描画
