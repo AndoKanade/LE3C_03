@@ -97,6 +97,25 @@ private:
 	// Hierarchy/Inspectorで選択中の的のインデックス(-1は未選択)
 	int selectedTargetIndex_ = -1;
 
+	// 弾(プロジェクタイル)。プレイヤーが発射し、的との距離判定でヒットを取る
+	struct Bullet{
+		std::unique_ptr<Obj3D> obj;
+		Vector3 position;
+		Vector3 velocity;
+		float lifeTime = 0.0f;
+		bool isAlive = true;
+	};
+	std::vector<Bullet> bullets_;
+
+	// 弾の移動速度(1秒あたりの移動量)
+	const float kBulletSpeed_ = 40.0f;
+	// 弾の表示スケール
+	const float kBulletScale_ = 0.15f;
+	// 弾が的に命中したとみなす距離(弾と的の中心間距離がこの値以下でヒット)
+	const float kBulletHitRadius_ = 0.6f;
+	// 弾が的に当たらなかった場合に消滅するまでの生存時間(秒)
+	const float kBulletLifeTime_ = 2.0f;
+
 	// 照準判定の許容角度(ラジアン)。画面中央のレティクルがこの角度以内に的を捉えていればヒット
 	const float kAimHitAngle_ = 0.09f; // 約5度
 
