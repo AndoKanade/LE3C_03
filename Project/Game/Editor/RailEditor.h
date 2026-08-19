@@ -27,43 +27,56 @@ public:
 	// デバッグ用の描画処理
 	void Draw();
 
-	// レール上の座標を取得 (t: 0〜1)
+	// レール上の座標を取得 (t: 0〜1)。対象はアクティブなレール
 	Vector3 GetPositionOnRail(float t) const;
-	// レール上の回転を取得 (t: 0〜1)
+	// レール上の回転を取得 (t: 0〜1)。対象はアクティブなレール
 	Vector3 GetRotationOnRail(float t) const;
-	// レール上の正規化された進行方向を取得 (t: 0〜1)
+	// レール上の正規化された進行方向を取得 (t: 0〜1)。対象はアクティブなレール
 	Vector3 GetForwardOnRail(float t) const;
-	// レール上の速度(各制御点のSpeed値を補間したもの)を取得 (t: 0〜1)
+	// レール上の速度(各制御点のSpeed値を補間したもの)を取得 (t: 0〜1)。対象はアクティブなレール
 	float GetSpeedOnRail(float t) const;
 
-	// ImGui非表示時でもキー操作で表示切り替えを行うための関数
-	void ToggleShowControlPointModels(){ showControlPointModels_ = !showControlPointModels_; }
-	void ToggleShowCurve(){ showCurve_ = !showCurve_; }
+	// ImGui非表示時でもキー操作で表示切り替えを行うための関数(対象はアクティブなレール)
+	void ToggleShowControlPointModels();
+	void ToggleShowCurve();
 
-	// 全制御点の中心座標を取得
+	// アクティブなレールの全制御点の中心座標を取得
 	Vector3 GetControlPointsCenter() const;
-	// 全制御点を囲む範囲の半径を取得
+	// アクティブなレールの全制御点を囲む範囲の半径を取得
 	float GetControlPointsRadius() const;
 
-	// 現在の制御点をJSONファイルに保存する
+	// アクティブなレールの制御点をJSONファイルに保存する
 	void SaveToJson();
-	// JSONファイルから制御点を読み込む(ファイルが無い場合はスキップ)
+	// アクティブなレールの制御点をJSONファイルから読み込む(ファイルが無い場合はスキップ)
 	void LoadFromJson();
 
 private:
+	// 1本分のレールが持つデータ一式(制御点+描画用オブジェクト+表示設定)
+	struct Rail{
+		std::string name;                                  // レール名(UI表示・保存ファイル名の目印用)
+		std::vector<ControlPoint> controlPoints;            // 制御点を保存する配列
+		std::vector<std::unique_ptr<Obj3D>> pointObjects;   // 制御点描画用の3Dオブジェクト群
+		std::vector<std::unique_ptr<Obj3D>> curveObjects;   // レール曲線サンプリング点描画用のオブジェクト群(固定数)
+		bool showControlPointModels = true;                 // 制御点の球体モデルの描画フラグ
+		bool showCurve = true;                              // 曲線表示フラグ
+	};
+
 	// 制御点描画用の3Dオブジェクト生成
 	std::unique_ptr<Obj3D> CreatePointObject();
-	// pointObjects_の個数をcontrolPoints_に同期
-	void SyncPointObjectsToControlPoints();
+	// rail.pointObjectsの個数をrail.controlPointsに同期
+	void SyncPointObjectsToControlPoints(Rail& rail);
+	// 新しいレールを1本追加し、アクティブなレールとして切り替える
+	void AddRail();
+	// 指定インデックスのレールをアクティブなレールとして切り替える
+	void SwitchActiveRail(int index);
+	// レールのインデックスから保存先ファイルパスを求める(0番目のみ既存の互換パスを使う)
+	std::string GetRailFilePath(int index) const;
 
-	std::vector<ControlPoint> controlPoints_;          // 制御点を保存する配列
-	std::vector<std::unique_ptr<Obj3D>> pointObjects_; // 制御点描画用の3Dオブジェクト群
-	Obj3dCommon* objCommon_ = nullptr;                 // 3Dオブジェクト共通設定へのポインタ
+	std::vector<Rail> rails_;      // 全レールの配列
+	int activeRailIndex_ = 0;      // 現在編集・使用中のレールのインデックス
 
-	bool showControlPointModels_ = true;               // 制御点の球体モデルの描画フラグ
+	Obj3dCommon* objCommon_ = nullptr; // 3Dオブジェクト共通設定へのポインタ
 
-	// レール曲線の可視化用(一定間隔でサンプリングして球を並べる)
-	std::vector<std::unique_ptr<Obj3D>> curveObjects_; // サンプリング点描画用のオブジェクト群(固定数)
-	bool showCurve_ = true;                            // 曲線表示フラグ
-	static constexpr int kCurveSampleCount = 100;      // サンプリング分割数
+	// レール曲線可視化のサンプリング分割数
+	static constexpr int kCurveSampleCount = 100;
 };

@@ -18,6 +18,7 @@
 #include "GlobalVariables.h"
 #include "EditorWidgets.h"
 #include "EditorContext.h"
+#include <algorithm>
 #include <cstdio>
 
 // レールエディター
@@ -197,6 +198,7 @@ void GameScene::Update(){
 			for(auto& t : targets_){
 				t.isAlive = true;
 			}
+			bullets_.clear(); // Play開始時に残っている弾もリセットする
 		}
 		wasPlayMode_ = isPlayMode;
 
@@ -291,10 +293,33 @@ void GameScene::Update(){
 			player_->Update();
 		}
 
-		// 的の当たり判定と射撃処理(画面中央固定のレティクル方式)
+		// 弾の発射処理(SPACEキーを押した瞬間に1発だけ発射する。本実装への置き換えでPushKeyからTriggerKeyに変更)
+		bool shootTriggered = isPlayMode && input_ && input_->TriggerKey(DIK_SPACE);
+		if(shootTriggered){
+			Bullet bullet;
+			bullet.obj = std::make_unique<Obj3D>();
+			bullet.obj->Initialize(object3dCommon_);
+			bullet.obj->SetModel("Sphere/sphere.obj");
+			bullet.position = cameraPos;
+			bullet.velocity = cameraForward * kBulletSpeed_;
+			bullets_.push_back(std::move(bullet));
+		}
+
+		// 弾の移動更新と生存時間チェック(的に当たらなくても一定時間で消滅させる)
+		for(auto& bullet : bullets_){
+			if(!bullet.isAlive) continue;
+
+			bullet.position += bullet.velocity * deltaTime;
+			bullet.lifeTime += deltaTime;
+			if(bullet.lifeTime >= kBulletLifeTime_){
+				bullet.isAlive = false;
+			}
+		}
+
+		// 的の当たり判定(画面中央固定のレティクル方式)
 		// レティクルは常に画面中央=カメラの前方ベクトル方向なので、
-		// 「カメラ→的」の方向とカメラ前方ベクトルのなす角が閾値以内なら狙えている
-		bool shootPressed = isPlayMode && input_ && input_->PushKey(DIK_SPACE);
+		// 「カメラ→的」の方向とカメラ前方ベクトルのなす角が閾値以内なら狙えている(表示上のフィードバック用)
+		// 実際の命中判定は、発射した弾と的との距離が一定値以下になったかどうかで行う
 		bool isAimingAtAnyTarget = false; // レティクル中心の色変えに使う
 		for(auto& target : targets_){
 			if(!target.isAlive) continue;
@@ -309,8 +334,14 @@ void GameScene::Update(){
 				isAimingAtAnyTarget = true;
 			}
 
-			if(shootPressed && isAimed){
-				target.isAlive = false;
+			// 生存している弾との距離判定(中心間距離がkBulletHitRadius_以下ならヒット)
+			for(auto& bullet : bullets_){
+				if(!bullet.isAlive) continue;
+				if(Length(target.position - bullet.position) <= kBulletHitRadius_){
+					target.isAlive = false;
+					bullet.isAlive = false;
+					break;
+				}
 			}
 
 			if(target.obj){
@@ -322,6 +353,23 @@ void GameScene::Update(){
 					target.obj->SetCamera(activeCamera);
 				}
 				target.obj->Update();
+			}
+		}
+
+		// 命中または生存時間切れで消えた弾をリストから削除する
+		bullets_.erase(
+			std::remove_if(bullets_.begin(),bullets_.end(),[](const Bullet& b){ return !b.isAlive; }),
+			bullets_.end());
+
+		// 弾のトランスフォームを更新する(描画用)
+		for(auto& bullet : bullets_){
+			if(bullet.obj){
+				bullet.obj->SetTranslate(bullet.position);
+				bullet.obj->SetScale({kBulletScale_, kBulletScale_, kBulletScale_});
+				if(Camera* activeCamera = CameraManager::GetInstance()->GetActiveCamera()){
+					bullet.obj->SetCamera(activeCamera);
+				}
+				bullet.obj->Update();
 			}
 		}
 
@@ -513,6 +561,13 @@ void GameScene::Draw(){
 	for(auto& target : targets_){
 		if(target.isAlive && target.obj){
 			target.obj->Draw();
+		}
+	}
+
+	// 発射中の弾を描画
+	for(auto& bullet : bullets_){
+		if(bullet.isAlive && bullet.obj){
+			bullet.obj->Draw();
 		}
 	}
 
