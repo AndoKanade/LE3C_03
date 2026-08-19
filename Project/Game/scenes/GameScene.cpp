@@ -29,6 +29,13 @@ namespace{
 	const std::string kSkyboxTexture = "resource/Skybox/rostock_laage_airport_4k.dds";
 	// GlobalVariablesのグループ名(GameSceneの調整項目)
 	const char* kGameSceneGroup = "GameScene";
+
+	// 撃破演出(パーティクル)関連
+	// 変更箇所: 撃破演出の追加
+	// パーティクルに使用するテクスチャパス
+	const std::string kHitParticleTexture = "resource/circle.png";
+	// ParticleManager::EmitSpark()が内部で使用するグループ名と合わせる必要がある
+	const char* kHitParticleGroupName = "Spark";
 }
 
 GameScene::GameScene() = default;
@@ -148,6 +155,11 @@ void GameScene::Initialize(Obj3dCommon* object3dCommon,Input* input,SpriteCommon
 		static_cast<float>(WinAPI::kClientWidth) * 0.5f,
 		static_cast<float>(WinAPI::kClientHeight) * 0.5f
 		});
+
+	// 変更箇所: 撃破演出の追加
+	// 的の撃破時に発生させる火花パーティクルのグループを事前に生成しておく
+	TextureManager::GetInstance()->LoadTexture(kHitParticleTexture);
+	ParticleManager::GetInstance()->CreateParticleGroup(kHitParticleGroupName,kHitParticleTexture);
 }
 
 // シーンの終了処理
@@ -158,6 +170,12 @@ void GameScene::Update(){
 	// スカイボックスの更新
 	if(skybox_){
 		skybox_->Update(*CameraManager::GetInstance()->GetActiveCamera());
+	}
+
+	// 変更箇所: 撃破演出の追加
+	// パーティクルの更新(ビルボード行列・寿命の進行など)
+	if(Camera* activeCamera = CameraManager::GetInstance()->GetActiveCamera()){
+		ParticleManager::GetInstance()->Update(activeCamera);
 	}
 
 	// レティクルの更新(画面中央固定なので位置は変わらないが、内部行列更新のため毎フレーム呼ぶ)
@@ -340,6 +358,9 @@ void GameScene::Update(){
 				if(Length(target.position - bullet.position) <= kBulletHitRadius_){
 					target.isAlive = false;
 					bullet.isAlive = false;
+					// 変更箇所: 撃破演出の追加
+					// 的の撃破位置に火花パーティクルを発生させる
+					ParticleManager::GetInstance()->EmitSpark(target.position);
 					break;
 				}
 			}
@@ -569,6 +590,12 @@ void GameScene::Draw(){
 		if(bullet.isAlive && bullet.obj){
 			bullet.obj->Draw();
 		}
+	}
+
+	// 変更箇所: 撃破演出の追加
+	// 撃破演出パーティクルの描画(3Dオブジェクトの後、2Dレティクルの前に描画する)
+	if(Camera* activeCamera = CameraManager::GetInstance()->GetActiveCamera()){
+		ParticleManager::GetInstance()->Draw(activeCamera->GetViewProjectionMatrix());
 	}
 
 	// 画面中央固定のレティクルを描画(2D描画のため、SpriteCommonの描画前処理を先に呼ぶ)
