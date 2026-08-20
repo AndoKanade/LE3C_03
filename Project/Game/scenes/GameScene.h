@@ -81,10 +81,15 @@ private:
 	float aimYawOffset_ = 0.0f;   // 左右(Y軸回転)
 	float aimPitchOffset_ = 0.0f; // 上下(X軸回転)
 
-	// 照準の可動範囲・速度
-	const float kAimSpeed_ = 1.5f;       // 1秒あたりの回転量(ラジアン)
-	const float kAimYawLimit_ = 0.6f;    // 左右の可動範囲(約34度)
-	const float kAimPitchLimit_ = 0.5f;  // 上下の可動範囲(約29度)
+	// 照準の可動範囲・感度
+	const float kMouseSensitivity_ = 0.0004f; // マウス1移動量あたりの回転量(ラジアン)
+	const float kAimYawLimit_ = 0.6f;        // 左右の可動範囲(約34度)
+	const float kAimPitchLimit_ = 0.5f;      // 上下の可動範囲(約29度)
+
+	// レール間分岐移動用の状態
+	bool hasPendingBranch_ = false;           // 分岐先が判明し、乗り移り待ちかどうか
+	int pendingBranchTargetRailIndex_ = -1;   // 乗り移り先レールのインデックス
+	int pendingBranchTargetPointIndex_ = -1;  // 乗り移り先レール側の対応する制御点インデックス
 
 	// テスト用の的
 	struct Target{

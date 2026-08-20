@@ -23,7 +23,11 @@
 - 実装済み：的（Target）をHierarchy的な一覧として選択・表示する機能（GameScene.cpp）
 - 未実装：RailEditorの制御点をHierarchy的な一覧として選択・表示する機能（現状はText表示のみ、選択状態なし）
 - 実装済み：撃破演出（GameScene.cpp）。ParticleManagerのUpdate/Drawをゲームループに接続し、的の撃破時にEmitSparkで火花パーティクルを発生させる
-- 未着手：レール間の移動（SwitchActiveRailはエディタUI専用で、Playモード中のロジックからは未使用）
+- 実装済み：レール間の移動。分岐元の制御点にbranchTargetRailIndex/branchTargetPointIndexを持たせ、Play中にその制御点を通過すると分岐先レールの位置が左右どちらにあるかを自動判定し、矢印キーで乗り移れる（現状は動作確認のためLEFT/RIGHTどちらでも乗り移れる暫定状態。左右限定に絞る場合は要調整）
+- 実装済み：視点操作をマウスに変更（矢印キーはレール分岐の乗り移り専用）
+- 実装済み：Playモード中もレール（制御点・曲線）を表示し、レールごとに色分け。分岐先レールは黄色でハイライト
+- 実装済み：複数レールのSave/Loadをアクティブなレールのみでなく全レール対応に修正
+- 実装済み：動作確認用のRail Branch Debugパネル（GameScene.cpp）
 
 # 直近のタスク（日程目安）
 - 8/23まで：レール間を移動できるようにする

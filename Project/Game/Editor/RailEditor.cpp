@@ -21,6 +21,18 @@ namespace{
 	const std::string kFirstRailSaveFilePath = "resource/rail/rail.json";
 	// 制御点リセット用のデフォルト値(初期制御点/Add Control Pointボタンと同じ初期値)
 	constexpr RailEditor::ControlPoint kDefaultControlPoint = {{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}, 1.0f};
+
+	// レールごとの色分け用パレット(レール数がパレット数を超えたら循環して使う)
+	constexpr Vector4 kRailColorPalette[] = {
+		{1.0f, 1.0f, 1.0f, 1.0f}, // Rail 0: 白
+		{0.3f, 0.6f, 1.0f, 1.0f}, // Rail 1: 水色
+		{1.0f, 0.4f, 0.8f, 1.0f}, // Rail 2: ピンク
+		{0.6f, 1.0f, 0.4f, 1.0f}, // Rail 3: 黄緑
+	};
+	constexpr int kRailColorPaletteCount = 4;
+
+	// 分岐先として乗り移り可能になったレールを強調する色(目立つ黄色)
+	constexpr Vector4 kHighlightColor = {1.0f, 0.9f, 0.1f, 1.0f};
 }
 
 RailEditor::RailEditor() = default;
@@ -60,14 +72,6 @@ void RailEditor::AddRail(){
 
 	rails_.push_back(std::move(rail));
 	activeRailIndex_ = static_cast<int>(rails_.size()) - 1;
-}
-
-// 指定インデックスのレールをアクティブなレールとして切り替える
-void RailEditor::SwitchActiveRail(int index){
-	if(index < 0 || index >= static_cast<int>(rails_.size())){
-		return; // 範囲外は無視
-	}
-	activeRailIndex_ = index;
 }
 
 // レールのインデックスから保存先ファイルパスを求める(0番目のみ既存の互換パスを使う)
@@ -164,6 +168,11 @@ void RailEditor::Update(){
 		ImGui::DragFloat3("Rotation",&activeRail.controlPoints[i].rotation.x,0.1f);
 		ImGui::DragFloat("Speed",&activeRail.controlPoints[i].speed,0.1f);
 
+		// レール間分岐移動用の設定欄(-1で分岐なし)
+		ImGui::InputInt("Branch Target Rail",&activeRail.controlPoints[i].branchTargetRailIndex);
+		ImGui::InputInt("Branch Target Point",&activeRail.controlPoints[i].branchTargetPointIndex);
+		ImGui::TextDisabled("(-1で分岐なし。分岐先レールIndexと対応する制御点Indexを指定)");
+
 		// 制御点のパラメータをデフォルト値に戻すボタン
 		if(ImGui::Button("Reset")){
 			activeRail.controlPoints[i] = kDefaultControlPoint;
@@ -195,57 +204,67 @@ void RailEditor::Update(){
 
 // デバッグ用の描画処理
 void RailEditor::Draw(){
-	// Playモード中は制御点の球やレール曲線(編集用ギズモ)を隠す
-	if(EditorContext::GetInstance()->IsPlayMode()){ return; }
-
+	// Playモード中もレール(制御点の球・曲線)を見えるようにする
 	Camera* activeCamera = CameraManager::GetInstance()->GetActiveCamera();
 
-	// アクティブなレールのみ描画する
-	Rail& activeRail = rails_[activeRailIndex_];
+	// レール間分岐移動を目視確認できるよう、アクティブなレールだけでなく全レールを描画する
+	// レールごとに色を分け、分岐先として強調指定されているレールは目立つ色で上書きする
+	for(size_t railIndex = 0; railIndex < rails_.size(); ++railIndex){
+		Rail& rail = rails_[railIndex];
 
-	// 表示OFFのときは制御点のモデルを描画しない
-	if(activeRail.showControlPointModels){
-		// 制御点ごとに専用の3Dオブジェクトで描画
-		for(size_t i = 0; i < activeRail.controlPoints.size(); ++i){
-			activeRail.pointObjects[i]->SetTranslate(activeRail.controlPoints[i].position);
-			// 視認性向上のためスケールを縮小
-			activeRail.pointObjects[i]->SetScale({0.5f, 0.5f, 0.5f});
-
-			// アクティブカメラに毎フレーム同期
-			if(activeCamera){
-				activeRail.pointObjects[i]->SetCamera(activeCamera);
-			}
-
-			activeRail.pointObjects[i]->Update();
-			activeRail.pointObjects[i]->Draw();
+		Vector4 railColor = kRailColorPalette[railIndex % kRailColorPaletteCount];
+		if(static_cast<int>(railIndex) == highlightedRailIndex_){
+			railColor = kHighlightColor;
 		}
-	}
 
-	// レール曲線をサンプリング点列(小さい球)で可視化する簡易版
-	// Catmull-Romは制御点4つ以上必要なので、それ未満のときは何も描画しない
-	if(activeRail.showCurve && activeRail.controlPoints.size() >= 4){
-		for(int i = 0; i < kCurveSampleCount; ++i){
-			float t = static_cast<float>(i) / static_cast<float>(kCurveSampleCount - 1);
-			Vector3 pos = GetPositionOnRail(t);
+		// 表示OFFのときは制御点のモデルを描画しない
+		if(rail.showControlPointModels){
+			// 制御点ごとに専用の3Dオブジェクトで描画
+			for(size_t i = 0; i < rail.controlPoints.size(); ++i){
+				rail.pointObjects[i]->SetTranslate(rail.controlPoints[i].position);
+				// 視認性向上のためスケールを縮小
+				rail.pointObjects[i]->SetScale({0.5f, 0.5f, 0.5f});
+				if(Model::Material* mat = rail.pointObjects[i]->GetMaterial()){
+					mat->color = railColor;
+				}
 
-			activeRail.curveObjects[i]->SetTranslate(pos);
-			// 制御点よりさらに小さくして、線のように見せる
-			activeRail.curveObjects[i]->SetScale({0.04f, 0.04f, 0.04f});
+				// アクティブカメラに毎フレーム同期
+				if(activeCamera){
+					rail.pointObjects[i]->SetCamera(activeCamera);
+				}
 
-			if(activeCamera){
-				activeRail.curveObjects[i]->SetCamera(activeCamera);
+				rail.pointObjects[i]->Update();
+				rail.pointObjects[i]->Draw();
 			}
+		}
 
-			activeRail.curveObjects[i]->Update();
-			activeRail.curveObjects[i]->Draw();
+		// レール曲線をサンプリング点列(小さい球)で可視化する簡易版
+		// Catmull-Romは制御点4つ以上必要なので、それ未満のときは何も描画しない
+		if(rail.showCurve && rail.controlPoints.size() >= 4){
+			for(int i = 0; i < kCurveSampleCount; ++i){
+				float t = static_cast<float>(i) / static_cast<float>(kCurveSampleCount - 1);
+				Vector3 pos = ComputePositionOnRail(rail.controlPoints,t);
+
+				rail.curveObjects[i]->SetTranslate(pos);
+				// 制御点よりさらに小さくして、線のように見せる
+				rail.curveObjects[i]->SetScale({0.04f, 0.04f, 0.04f});
+				if(Model::Material* mat = rail.curveObjects[i]->GetMaterial()){
+					mat->color = railColor;
+				}
+
+				if(activeCamera){
+					rail.curveObjects[i]->SetCamera(activeCamera);
+				}
+
+				rail.curveObjects[i]->Update();
+				rail.curveObjects[i]->Draw();
+			}
 		}
 	}
 }
 
-// 進行度t(0〜1)からレール上の座標を取得(対象はアクティブなレール)
-Vector3 RailEditor::GetPositionOnRail(float t) const{
-	const std::vector<ControlPoint>& controlPoints = rails_[activeRailIndex_].controlPoints;
-
+// 進行度tと制御点配列から、レール上の座標を計算する(GetPositionOnRail・全レール描画で共用)
+Vector3 RailEditor::ComputePositionOnRail(const std::vector<ControlPoint>& controlPoints,float t) const{
 	// Catmull-Rom補間には最低4点必要
 	if(controlPoints.size() < 4){
 		return {0.0f, 0.0f, 0.0f};
@@ -269,6 +288,11 @@ Vector3 RailEditor::GetPositionOnRail(float t) const{
 	const Vector3& p3 = controlPoints[segment + 3].position;
 
 	return CatmullRom(p0,p1,p2,p3,localT);
+}
+
+// 進行度t(0〜1)からレール上の座標を取得(対象はアクティブなレール)
+Vector3 RailEditor::GetPositionOnRail(float t) const{
+	return ComputePositionOnRail(rails_[activeRailIndex_].controlPoints,t);
 }
 
 // 進行度t(0〜1)からレール上の回転(オイラー角)を取得(対象はアクティブなレール)
@@ -353,6 +377,103 @@ float RailEditor::GetSpeedOnRail(float t) const{
 	return Lerp(controlPoints[segment].speed,controlPoints[segment + 1].speed,localT);
 }
 
+// 指定インデックスのレールをアクティブなレールとして切り替える(Playモードでのレール乗り換えにも使用)
+void RailEditor::SwitchActiveRail(int index){
+	if(index < 0 || index >= static_cast<int>(rails_.size())){
+		return; // 範囲外は無視
+	}
+	activeRailIndex_ = index;
+}
+
+// 現在アクティブなレールのインデックスを取得(デバッグ表示用)
+int RailEditor::GetActiveRailIndex() const{
+	return activeRailIndex_;
+}
+
+// 読み込まれている全レールの本数を取得(デバッグ表示用)
+int RailEditor::GetRailCount() const{
+	return static_cast<int>(rails_.size());
+}
+
+// 分岐先として強調表示したいレールのインデックスを指定する(-1で強調解除)
+void RailEditor::SetHighlightedRailIndex(int index){
+	highlightedRailIndex_ = index;
+}
+
+// アクティブなレールの制御点数を取得
+int RailEditor::GetControlPointCount() const{
+	return static_cast<int>(rails_[activeRailIndex_].controlPoints.size());
+}
+
+// 進行度tから、直近に通過した制御点のインデックスを取得(対象はアクティブなレール)
+// GetPositionOnRailと同じ区間分割を用い、区間の始点(制御点)のインデックスを返す
+int RailEditor::GetControlPointIndexFromT(float t) const{
+	const std::vector<ControlPoint>& controlPoints = rails_[activeRailIndex_].controlPoints;
+
+	// Catmull-Rom補間には最低4点必要
+	if(controlPoints.size() < 4){
+		return 0;
+	}
+
+	size_t numSegments = controlPoints.size() - 3;
+	float scaledT = t * static_cast<float>(numSegments);
+	size_t segment = static_cast<size_t>(scaledT);
+
+	if(segment >= numSegments){
+		segment = numSegments - 1;
+	}
+
+	// 区間の始点(GetPositionOnRailで言うp1)のインデックスが「直近に通過した制御点」
+	return static_cast<int>(segment) + 1;
+}
+
+// 指定した制御点インデックスにちょうど乗る進行度tを取得(対象はアクティブなレール)
+// GetControlPointIndexFromTの逆算(pointIndex = segment + 1 の関係を利用)
+float RailEditor::GetTFromControlPointIndex(int pointIndex) const{
+	const std::vector<ControlPoint>& controlPoints = rails_[activeRailIndex_].controlPoints;
+
+	// Catmull-Rom補間には最低4点必要
+	if(controlPoints.size() < 4){
+		return 0.0f;
+	}
+
+	int numSegments = static_cast<int>(controlPoints.size()) - 3;
+	int segment = pointIndex - 1;
+
+	if(segment < 0) segment = 0;
+	if(segment >= numSegments) segment = numSegments - 1;
+
+	return static_cast<float>(segment) / static_cast<float>(numSegments);
+}
+
+// アクティブなレールの指定インデックスの制御点に設定された分岐先情報を取得
+RailEditor::BranchInfo RailEditor::GetBranchAt(int pointIndex) const{
+	const std::vector<ControlPoint>& controlPoints = rails_[activeRailIndex_].controlPoints;
+
+	if(pointIndex < 0 || pointIndex >= static_cast<int>(controlPoints.size())){
+		return BranchInfo{};
+	}
+
+	BranchInfo info;
+	info.targetRailIndex = controlPoints[pointIndex].branchTargetRailIndex;
+	info.targetPointIndex = controlPoints[pointIndex].branchTargetPointIndex;
+	return info;
+}
+
+// 指定したレール・制御点インデックスの座標を取得(乗り移り方向の判定用。アクティブレール以外も参照可能)
+Vector3 RailEditor::GetControlPointPosition(int railIndex,int pointIndex) const{
+	if(railIndex < 0 || railIndex >= static_cast<int>(rails_.size())){
+		return {0.0f, 0.0f, 0.0f};
+	}
+
+	const std::vector<ControlPoint>& controlPoints = rails_[railIndex].controlPoints;
+	if(pointIndex < 0 || pointIndex >= static_cast<int>(controlPoints.size())){
+		return {0.0f, 0.0f, 0.0f};
+	}
+
+	return controlPoints[pointIndex].position;
+}
+
 // アクティブなレールの全制御点を囲む範囲の中心座標を取得
 Vector3 RailEditor::GetControlPointsCenter() const{
 	const std::vector<ControlPoint>& controlPoints = rails_[activeRailIndex_].controlPoints;
@@ -413,26 +534,29 @@ void RailEditor::ToggleShowCurve(){
 	rails_[activeRailIndex_].showCurve = !rails_[activeRailIndex_].showCurve;
 }
 
-// アクティブなレールの制御点をJSONファイルに保存する
-void RailEditor::SaveToJson(){
-	Rail& activeRail = rails_[activeRailIndex_];
+// 指定インデックスのレール1本だけをJSONファイルに保存する
+void RailEditor::SaveRailToFile(int index){
+	Rail& rail = rails_[index];
 
 	// ルート要素。nameは読み込み時の簡易フォーマットチェック・レール名の保存用
 	nlohmann::json root;
-	root["name"] = activeRail.name;
+	root["name"] = rail.name;
 
 	// 各制御点を配列に詰める
 	nlohmann::json pointsJson = nlohmann::json::array();
-	for(const auto& cp : activeRail.controlPoints){
+	for(const auto& cp : rail.controlPoints){
 		nlohmann::json pj;
 		pj["position"] = {cp.position.x, cp.position.y, cp.position.z};
 		pj["rotation"] = {cp.rotation.x, cp.rotation.y, cp.rotation.z};
 		pj["speed"] = cp.speed;
+		// レール間分岐移動用のデータ
+		pj["branchTargetRailIndex"] = cp.branchTargetRailIndex;
+		pj["branchTargetPointIndex"] = cp.branchTargetPointIndex;
 		pointsJson.push_back(pj);
 	}
 	root["control_points"] = pointsJson;
 
-	std::string savePathStr = GetRailFilePath(activeRailIndex_);
+	std::string savePathStr = GetRailFilePath(index);
 
 	// 保存先フォルダが無ければ作成しておく
 	std::filesystem::path savePath(savePathStr);
@@ -448,13 +572,13 @@ void RailEditor::SaveToJson(){
 	file << std::setw(4) << root << std::endl;
 }
 
-// アクティブなレールの制御点をJSONファイルから読み込む(ファイルが無ければ何もしない)
-void RailEditor::LoadFromJson(){
-	Rail& activeRail = rails_[activeRailIndex_];
+// 指定インデックスのレール1本だけをJSONファイルから読み込む(ファイルが無ければ何もしない)
+void RailEditor::LoadRailFromFile(int index){
+	Rail& rail = rails_[index];
 
-	std::ifstream file(GetRailFilePath(activeRailIndex_));
+	std::ifstream file(GetRailFilePath(index));
 	if(!file.is_open()){
-		// ファイルがまだ無い(初回起動など)ときは初期状態のまま
+		// ファイルがまだ無い(初回起動・新規追加直後など)ときは現状維持
 		return;
 	}
 
@@ -468,11 +592,11 @@ void RailEditor::LoadFromJson(){
 
 	// レール名が保存されていれば復元する
 	if(root.contains("name") && root["name"].is_string()){
-		activeRail.name = root["name"].get<std::string>();
+		rail.name = root["name"].get<std::string>();
 	}
 
 	// 読み込んだ内容で制御点を置き換える
-	activeRail.controlPoints.clear();
+	rail.controlPoints.clear();
 	for(const auto& pj : root["control_points"]){
 		ControlPoint cp{};
 		cp.position.x = pj["position"][0].get<float>();
@@ -482,14 +606,45 @@ void RailEditor::LoadFromJson(){
 		cp.rotation.y = pj["rotation"][1].get<float>();
 		cp.rotation.z = pj["rotation"][2].get<float>();
 		cp.speed = pj["speed"].get<float>();
-		activeRail.controlPoints.push_back(cp);
+		// レール間分岐移動用のデータ(旧フォーマットのJSONには無いため、value()で既定値-1を補う)
+		cp.branchTargetRailIndex = pj.value("branchTargetRailIndex",-1);
+		cp.branchTargetPointIndex = pj.value("branchTargetPointIndex",-1);
+		rail.controlPoints.push_back(cp);
 	}
 
 	// 制御点が0個だと他の処理(補間など)が破綻するので最低1点は保証する
-	if(activeRail.controlPoints.empty()){
-		activeRail.controlPoints.push_back(kDefaultControlPoint);
+	if(rail.controlPoints.empty()){
+		rail.controlPoints.push_back(kDefaultControlPoint);
 	}
 
 	// 描画用オブジェクトの数を制御点数に合わせる
-	SyncPointObjectsToControlPoints(activeRail);
+	SyncPointObjectsToControlPoints(rail);
+}
+
+// 全レールをそれぞれ対応するJSONファイルへ保存する
+void RailEditor::SaveToJson(){
+	for(size_t i = 0; i < rails_.size(); ++i){
+		SaveRailToFile(static_cast<int>(i));
+	}
+}
+
+// 全レールをJSONファイルから読み込む
+// メモリ上に既にあるレールは対応ファイルで上書きし、ディスクにのみ存在するレール(rail1.json, rail2.json...)は
+// New Rail相当の追加をしながら連番で読み込んでいく(ファイルが途切れたところで打ち切り)
+void RailEditor::LoadFromJson(){
+	// 既存のレールを、それぞれ対応するファイルがあれば読み込み直す
+	for(size_t i = 0; i < rails_.size(); ++i){
+		LoadRailFromFile(static_cast<int>(i));
+	}
+
+	// メモリ上にまだ無いレールも、ファイルが存在する限り新規追加しながら連番で読み込む
+	int index = static_cast<int>(rails_.size());
+	while(std::filesystem::exists(GetRailFilePath(index))){
+		AddRail();
+		LoadRailFromFile(index);
+		++index;
+	}
+
+	// 読み込み後は先頭のレールをアクティブな編集対象にする
+	activeRailIndex_ = 0;
 }
