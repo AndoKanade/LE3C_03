@@ -110,6 +110,9 @@ private:
 	int activeRailIndex_ = 0;       // 現在編集・使用中のレールのインデックス
 	int highlightedRailIndex_ = -1; // 分岐先として強調表示するレールのインデックス(-1: 強調なし)
 
+	// Hierarchy的な一覧(制御点リスト)で選択中の制御点インデックス(-1: 未選択)
+	int selectedPointIndex_ = -1;
+
 	Obj3dCommon* objCommon_ = nullptr; // 3Dオブジェクト共通設定へのポインタ
 
 	// レール曲線可視化のサンプリング分割数

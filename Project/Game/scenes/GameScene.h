@@ -49,7 +49,7 @@ private:
 	// プレイヤーモデルの表示スケール
 	const float kPlayerScale_ = 0.3f;
 	// プレイヤーモデルをレール位置よりさらに下げるオフセット
-	// 注意: カメラのFOV(0.45rad≒26度)が狭いため、大きくしすぎると視野から外れて描画されなくなる
+	// 注意: カメラのFOV(1.0472rad≒60度)を超えて大きくしすぎると視野から外れて描画されなくなる
 	const float kPlayerDownOffset_ = 0.1f;
 
 	// レール移動の進行度(0〜1)と速度
@@ -69,6 +69,9 @@ private:
 
 	// 俯瞰デバッグカメラON/OFF状態
 	bool useDebugTopCamera_ = false;
+
+	// マウスカーソルの表示状態(Playモード中にTABキーで切り替え。Editモードでは常に表示する)
+	bool isCursorVisible_ = true;
 
 	// カメラの現在位置を可視化するためのマーカー
 	std::unique_ptr<Obj3D> cameraMarker_;
@@ -120,6 +123,8 @@ private:
 	const float kBulletHitRadius_ = 0.6f;
 	// 弾が的に当たらなかった場合に消滅するまでの生存時間(秒)
 	const float kBulletLifeTime_ = 2.0f;
+	// 弾に適用する重力加速度(1秒あたりの下方向への速度変化量)
+	const float kBulletGravity_ = 9.8f;
 
 	// 照準判定の許容角度(ラジアン)。画面中央のレティクルがこの角度以内に的を捉えていればヒット
 	const float kAimHitAngle_ = 0.09f; // 約5度

@@ -4,6 +4,7 @@
 #include "ModelManager.h"
 #include "ParticleManager.h"
 #include "SoundManager.h"
+#include "SceneManager.h"
 #include "TextureManager.h"
 #include "Skybox.h"
 #include "SkyboxCommon.h"
@@ -238,6 +239,19 @@ void GameScene::Update(){
 		}
 		wasPlayMode_ = isPlayMode;
 
+		// マウスカーソルの表示/非表示切り替え
+		// Editモードでは常に表示する(ImGui操作にカーソルが必要なため、Play中に消していても強制的に戻す)
+		// Playモード中はTABキーで切り替えられるようにする(照準はマウスの移動量のみで行うため、カーソル表示が邪魔になることがある)
+		if(!isPlayMode){
+			if(!isCursorVisible_){
+				isCursorVisible_ = true;
+				::ShowCursor(TRUE);
+			}
+		} else if(input_ && input_->TriggerKey(DIK_TAB)){
+			isCursorVisible_ = !isCursorVisible_;
+			::ShowCursor(isCursorVisible_?TRUE:FALSE);
+		}
+
 		// レール進行はPlayモードかつ終端未到達のときだけ進める(Edit中はその位置で静止)
 		// 終端に到達したらループさせず、その場で停止させる
 		if(isPlayMode && !isRailFinished_){
@@ -347,6 +361,13 @@ void GameScene::Update(){
 			}
 		}
 
+		// クリア判定
+		// 現在アクティブなレールが最後まで到達し、かつ乗り移れる分岐が残っていなければ、
+		// いったんゴール(クリア)としてクリア画面へ遷移する
+		if(isPlayMode && isRailFinished_ && !hasPendingBranch_){
+			sceneManager_->ChangeScene("CLEAR");
+		}
+
 		// 分岐先レールをハイライト表示させる(乗り移り可能であることが見た目でわかるように)
 		railEditor_->SetHighlightedRailIndex(hasPendingBranch_?pendingBranchTargetRailIndex_:-1);
 
@@ -410,6 +431,9 @@ void GameScene::Update(){
 		// 弾の移動更新と生存時間チェック(的に当たらなくても一定時間で消滅させる)
 		for(auto& bullet : bullets_){
 			if(!bullet.isAlive) continue;
+
+			// 重力による速度変化(下方向)を先に適用してから位置を更新する(半陰的オイラー法)
+			bullet.velocity.y -= kBulletGravity_ * deltaTime;
 
 			bullet.position += bullet.velocity * deltaTime;
 			bullet.lifeTime += deltaTime;

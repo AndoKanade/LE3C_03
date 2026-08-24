@@ -154,28 +154,53 @@ void RailEditor::Update(){
 
 	ImGui::Separator();
 
+	// 選択中の制御点インデックスが範囲外になっていたら選択解除する(削除・レール切り替え後など)
+	if(selectedPointIndex_ >= static_cast<int>(activeRail.controlPoints.size())){
+		selectedPointIndex_ = -1;
+	}
+
 	// 削除ボタンが押された制御点のインデックス(未押下なら-1のまま)
 	int deleteIndex = -1;
 
-	// 各制御点の編集UI
+	// 制御点一覧(Hierarchy的な一覧表示)。クリックした行を選択状態にする
+	ImGui::Text("Control Points: %zu",activeRail.controlPoints.size());
 	for(size_t i = 0; i < activeRail.controlPoints.size(); ++i){
 		// IDの重複を防ぐためPushIDを使用
 		ImGui::PushID(static_cast<int>(i));
-		ImGui::Text("Point %zu",i);
+
+		// 分岐先が設定されている制御点には目印を付ける
+		bool hasBranch = (activeRail.controlPoints[i].branchTargetRailIndex >= 0);
+		char label[32];
+		snprintf(label,sizeof(label),"Point %zu%s",i,hasBranch?" (Branch)":"");
+
+		// クリックで選択。選択中の行はハイライトされる
+		if(ImGui::Selectable(label,selectedPointIndex_ == static_cast<int>(i))){
+			selectedPointIndex_ = static_cast<int>(i);
+		}
+		ImGui::PopID();
+	}
+
+	ImGui::Separator();
+
+	// 選択中の制御点のみ編集UIを表示する(未選択時は何も編集できない)
+	if(selectedPointIndex_ >= 0 && selectedPointIndex_ < static_cast<int>(activeRail.controlPoints.size())){
+		ImGui::PushID(selectedPointIndex_);
+		ControlPoint& selectedPoint = activeRail.controlPoints[selectedPointIndex_];
+		ImGui::Text("Point %d",selectedPointIndex_);
 
 		// 座標、回転、速度の編集UI
-		ImGui::DragFloat3("Position",&activeRail.controlPoints[i].position.x,0.1f);
-		ImGui::DragFloat3("Rotation",&activeRail.controlPoints[i].rotation.x,0.1f);
-		ImGui::DragFloat("Speed",&activeRail.controlPoints[i].speed,0.1f);
+		ImGui::DragFloat3("Position",&selectedPoint.position.x,0.1f);
+		ImGui::DragFloat3("Rotation",&selectedPoint.rotation.x,0.1f);
+		ImGui::DragFloat("Speed",&selectedPoint.speed,0.1f);
 
 		// レール間分岐移動用の設定欄(-1で分岐なし)
-		ImGui::InputInt("Branch Target Rail",&activeRail.controlPoints[i].branchTargetRailIndex);
-		ImGui::InputInt("Branch Target Point",&activeRail.controlPoints[i].branchTargetPointIndex);
+		ImGui::InputInt("Branch Target Rail",&selectedPoint.branchTargetRailIndex);
+		ImGui::InputInt("Branch Target Point",&selectedPoint.branchTargetPointIndex);
 		ImGui::TextDisabled("(-1で分岐なし。分岐先レールIndexと対応する制御点Indexを指定)");
 
 		// 制御点のパラメータをデフォルト値に戻すボタン
 		if(ImGui::Button("Reset")){
-			activeRail.controlPoints[i] = kDefaultControlPoint;
+			selectedPoint = kDefaultControlPoint;
 		}
 		ImGui::SameLine();
 
@@ -183,19 +208,21 @@ void RailEditor::Update(){
 		bool isOnlyPoint = (activeRail.controlPoints.size() <= 1);
 		ImGui::BeginDisabled(isOnlyPoint);
 		if(ImGui::Button("Delete")){
-			deleteIndex = static_cast<int>(i);
+			deleteIndex = selectedPointIndex_;
 		}
 		ImGui::EndDisabled();
 
-		ImGui::Separator();
 		ImGui::PopID();
+	} else{
+		ImGui::TextDisabled("Select a point above");
 	}
 
-	// ループ中の削除はイテレータを壊すため、ループを抜けてから実行する
+	// 削除処理(一覧選択の状態も合わせて解除する)
 	if(deleteIndex >= 0){
 		activeRail.controlPoints.erase(activeRail.controlPoints.begin() + deleteIndex);
 		// pointObjectsの個数もcontrolPointsに合わせる(以降Draw()でインデックスがずれないようにする)
 		SyncPointObjectsToControlPoints(activeRail);
+		selectedPointIndex_ = -1;
 	}
 
 	ImGui::End();
@@ -383,6 +410,9 @@ void RailEditor::SwitchActiveRail(int index){
 		return; // 範囲外は無視
 	}
 	activeRailIndex_ = index;
+
+	// レールが変わったら、別レールの制御点を指したままにならないよう選択を解除する
+	selectedPointIndex_ = -1;
 }
 
 // 現在アクティブなレールのインデックスを取得(デバッグ表示用)
