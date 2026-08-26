@@ -322,6 +322,89 @@ Vector3 RailEditor::GetPositionOnRail(float t) const{
 	return ComputePositionOnRail(rails_[activeRailIndex_].controlPoints,t);
 }
 
+// ここから追加: レール座標によるオンレール判定用のAPI
+
+// 指定ワールド座標に最も近いレール上の進行度tを計算する
+// 手順: まずkNearestSearchSampleCount分割で粗くサンプリングして最も近い点を求め、
+// その前後の区間だけをkNearestRefineIterationCount回の三分探索で絞り込み、精度を上げる
+float RailEditor::ComputeNearestTOnRail(const std::vector<ControlPoint>& controlPoints,const Vector3& worldPos) const{
+	// Catmull-Rom補間には最低4点必要
+	if(controlPoints.size() < 4){
+		return 0.0f;
+	}
+
+	// 粗いサンプリングで最も近い点を探す
+	float bestT = 0.0f;
+	float bestDistSq = -1.0f;
+	for(int i = 0; i <= kNearestSearchSampleCount; ++i){
+		float t = static_cast<float>(i) / static_cast<float>(kNearestSearchSampleCount);
+		Vector3 pos = ComputePositionOnRail(controlPoints,t);
+		Vector3 diff = pos - worldPos;
+		float distSq = Dot(diff,diff);
+		if(bestDistSq < 0.0f || distSq < bestDistSq){
+			bestDistSq = distSq;
+			bestT = t;
+		}
+	}
+
+	// 粗探索で見つけた点の前後の区間を三分探索でさらに絞り込む
+	float rangeWidth = 1.0f / static_cast<float>(kNearestSearchSampleCount);
+	float lo = bestT - rangeWidth;
+	float hi = bestT + rangeWidth;
+	if(lo < 0.0f) lo = 0.0f;
+	if(hi > 1.0f) hi = 1.0f;
+
+	for(int i = 0; i < kNearestRefineIterationCount; ++i){
+		float m1 = lo + (hi - lo) / 3.0f;
+		float m2 = hi - (hi - lo) / 3.0f;
+
+		Vector3 diff1 = ComputePositionOnRail(controlPoints,m1) - worldPos;
+		Vector3 diff2 = ComputePositionOnRail(controlPoints,m2) - worldPos;
+
+		if(Dot(diff1,diff1) < Dot(diff2,diff2)){
+			hi = m2;
+		} else{
+			lo = m1;
+		}
+	}
+
+	return (lo + hi) * 0.5f;
+}
+
+// 指定ワールド座標に最も近いレール上の進行度t(0〜1)を求める(対象はアクティブなレール)
+float RailEditor::FindNearestTOnRail(const Vector3& worldPos) const{
+	return ComputeNearestTOnRail(rails_[activeRailIndex_].controlPoints,worldPos);
+}
+
+// 指定ワールド座標からレール上の最近傍点までの距離を求める(対象はアクティブなレール)
+float RailEditor::GetDistanceToRail(const Vector3& worldPos) const{
+	float nearestT = FindNearestTOnRail(worldPos);
+	Vector3 nearestPos = GetPositionOnRail(nearestT);
+	return Distance(nearestPos,worldPos);
+}
+
+// 全レールの中から、指定したワールド座標に最も近いレール・進行度・距離を求める(着地先レールの探索用)
+RailEditor::NearestRailResult RailEditor::FindNearestRail(const Vector3& worldPos) const{
+	NearestRailResult result;
+	float bestDistance = -1.0f;
+
+	for(size_t i = 0; i < rails_.size(); ++i){
+		float t = ComputeNearestTOnRail(rails_[i].controlPoints,worldPos);
+		Vector3 nearestPos = ComputePositionOnRail(rails_[i].controlPoints,t);
+		float distance = Distance(nearestPos,worldPos);
+
+		if(bestDistance < 0.0f || distance < bestDistance){
+			bestDistance = distance;
+			result.railIndex = static_cast<int>(i);
+			result.t = t;
+			result.distance = distance;
+		}
+	}
+
+	return result;
+}
+// ここまで追加
+
 // 進行度t(0〜1)からレール上の回転(オイラー角)を取得(対象はアクティブなレール)
 Vector3 RailEditor::GetRotationOnRail(float t) const{
 	const std::vector<ControlPoint>& controlPoints = rails_[activeRailIndex_].controlPoints;

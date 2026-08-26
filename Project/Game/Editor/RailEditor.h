@@ -27,6 +27,14 @@ public:
 		int targetPointIndex = -1; // 分岐先レール側の対応する制御点インデックス
 	};
 
+	// ここから追加: 着地判定(オフレール時、全レール中から最も近いレールを探す)用の結果
+	struct NearestRailResult{
+		int railIndex = -1;  // 最も近いレールのインデックス(レールが1本も無い場合は-1)
+		float t = 0.0f;      // そのレール上での進行度(0〜1)
+		float distance = 0.0f; // そのレールまでの距離
+	};
+	// ここまで追加
+
 	RailEditor();
 	~RailEditor();
 
@@ -45,6 +53,15 @@ public:
 	Vector3 GetForwardOnRail(float t) const;
 	// レール上の速度(各制御点のSpeed値を補間したもの)を取得 (t: 0〜1)。対象はアクティブなレール
 	float GetSpeedOnRail(float t) const;
+
+	// ここから追加: レール座標によるオンレール判定用のAPI
+	// 指定したワールド座標に最も近いレール上の進行度t(0〜1)を求める(対象はアクティブなレール)
+	float FindNearestTOnRail(const Vector3& worldPos) const;
+	// 指定したワールド座標からレール上の最近傍点までの距離を求める(対象はアクティブなレール)
+	float GetDistanceToRail(const Vector3& worldPos) const;
+	// 全レールの中から、指定したワールド座標に最も近いレール・進行度・距離を求める(着地先レールの探索用)
+	NearestRailResult FindNearestRail(const Vector3& worldPos) const;
+	// ここまで追加
 
 	// 指定インデックスのレールをアクティブなレールとして切り替える(Playモードでのレール乗り換えにも使用)
 	void SwitchActiveRail(int index);
@@ -101,6 +118,9 @@ private:
 	std::string GetRailFilePath(int index) const;
 	// 進行度tと制御点配列から、レール上の座標を計算する(GetPositionOnRail・全レール描画で共用)
 	Vector3 ComputePositionOnRail(const std::vector<ControlPoint>& controlPoints,float t) const;
+	// ここから追加: 指定ワールド座標に最も近いレール上の進行度tを計算する(粗いサンプリング+三分探索で絞り込み)
+	float ComputeNearestTOnRail(const std::vector<ControlPoint>& controlPoints,const Vector3& worldPos) const;
+	// ここまで追加
 	// 指定インデックスのレール1本だけをJSONファイルに保存する(SaveToJsonの内部実装)
 	void SaveRailToFile(int index);
 	// 指定インデックスのレール1本だけをJSONファイルから読み込む(LoadFromJsonの内部実装)
@@ -117,4 +137,11 @@ private:
 
 	// レール曲線可視化のサンプリング分割数
 	static constexpr int kCurveSampleCount = 100;
+
+	// ここから追加: 最近傍点探索用の定数
+	// 粗いサンプリングの分割数(精度と負荷のバランスをとった値)
+	static constexpr int kNearestSearchSampleCount = 200;
+	// 粗探索後、三分探索で絞り込む反復回数
+	static constexpr int kNearestRefineIterationCount = 20;
+	// ここまで追加
 };

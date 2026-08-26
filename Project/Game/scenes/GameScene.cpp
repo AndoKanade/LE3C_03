@@ -236,6 +236,11 @@ void GameScene::Update(){
 			hasPendingBranch_ = false;
 			pendingBranchTargetRailIndex_ = -1;
 			pendingBranchTargetPointIndex_ = -1;
+
+			// ここから追加: オンレール/オフレールの状態もリセットし、必ずオンレールから開始する
+			isOnRail_ = true;
+			freeVelocityY_ = 0.0f;
+			// ここまで追加
 		}
 		wasPlayMode_ = isPlayMode;
 
@@ -252,9 +257,9 @@ void GameScene::Update(){
 			::ShowCursor(isCursorVisible_?TRUE:FALSE);
 		}
 
-		// レール進行はPlayモードかつ終端未到達のときだけ進める(Edit中はその位置で静止)
+		// レール進行はPlayモードかつオンレール中、かつ終端未到達のときだけ進める(Edit中・オフレール中はその位置で静止)
 		// 終端に到達したらループさせず、その場で停止させる
-		if(isPlayMode && !isRailFinished_){
+		if(isPlayMode && isOnRail_ && !isRailFinished_){
 			// 現在位置に対応する制御点のSpeed値を取得し、全体速度(railSpeed_)に掛けて反映する
 			float pointSpeed = railEditor_->GetSpeedOnRail(railT_);
 			railT_ += pointSpeed * railSpeed_ * deltaTime;
@@ -265,8 +270,8 @@ void GameScene::Update(){
 		}
 
 		// レール間分岐移動 - 分岐検知
-		// まだ分岐先が確定していない間、現在のレール上で直近に通過した制御点に分岐設定があるか調べる
-		if(isPlayMode && !hasPendingBranch_){
+		// まだ分岐先が確定していない間、現在のレール上で直近に通過した制御点に分岐設定があるか調べる(オンレール中のみ)
+		if(isPlayMode && isOnRail_ && !hasPendingBranch_){
 			int currentPointIndex = railEditor_->GetControlPointIndexFromT(railT_);
 			RailEditor::BranchInfo branch = railEditor_->GetBranchAt(currentPointIndex);
 			if(branch.targetRailIndex >= 0){
@@ -279,8 +284,14 @@ void GameScene::Update(){
 		Vector3 railPos = railEditor_->GetPositionOnRail(railT_);
 		Vector3 railRot = railEditor_->GetRotationOnRail(railT_);
 
-		// 三人称視点用に、カメラの実位置はレールそのものではなく少し上に置く
-		Vector3 cameraPos = railPos + Vector3{0.0f, cameraHeightOffset, 0.0f};
+		// ここから追加: オンレール/オフレールの状態に応じて、カメラ・プレイヤーの基準位置と基準向きを切り替える
+		// オフレール中は、直前フレームで更新した自由移動座標(freePosition_)とジャンプ時に固定した向き(freeBaseRot_)を基準にする
+		Vector3 basePos = isOnRail_?railPos:freePosition_;
+		Vector3 baseRot = isOnRail_?railRot:freeBaseRot_;
+		// ここまで追加
+
+		// 三人称視点用に、カメラの実位置は基準位置そのものではなく少し上に置く
+		Vector3 cameraPos = basePos + Vector3{0.0f, cameraHeightOffset, 0.0f};
 
 		// プレイヤー入力で照準(カメラの向き)をレールの向きに上乗せする
 		// Edit中は入力を受け付けない(ゲームは静止)
@@ -295,8 +306,8 @@ void GameScene::Update(){
 			if(aimPitchOffset_ < -aimPitchLimit) aimPitchOffset_ = -aimPitchLimit;
 		}
 
-		// レールの向き + 照準オフセットを最終的なカメラの向きとする
-		Vector3 finalRot = {railRot.x + aimPitchOffset_, railRot.y + aimYawOffset_, railRot.z};
+		// 基準向き + 照準オフセットを最終的なカメラの向きとする
+		Vector3 finalRot = {baseRot.x + aimPitchOffset_, baseRot.y + aimYawOffset_, baseRot.z};
 
 		if(Camera* mainCamera = CameraManager::GetInstance()->GetCamera("default")){
 			mainCamera->SetTranslate(cameraPos);
@@ -340,8 +351,8 @@ void GameScene::Update(){
 		bool debugBranchIsRight = false;
 
 		// 分岐先が判明している間、カメラ右方向ベクトルとの内積の符号で分岐先が左右どちらにあるか判定し、
-		// 対応する矢印キーが押されたら分岐先レールへ乗り移る
-		if(isPlayMode && hasPendingBranch_ && input_ && railEditor_){
+		// 対応する矢印キーが押されたら分岐先レールへ乗り移る(オンレール中のみ)
+		if(isPlayMode && isOnRail_ && hasPendingBranch_ && input_ && railEditor_){
 			Vector3 branchTargetPos = railEditor_->GetControlPointPosition(pendingBranchTargetRailIndex_,pendingBranchTargetPointIndex_);
 			Vector3 toBranch = branchTargetPos - cameraPos;
 
@@ -363,8 +374,8 @@ void GameScene::Update(){
 
 		// クリア判定
 		// 現在アクティブなレールが最後まで到達し、かつ乗り移れる分岐が残っていなければ、
-		// いったんゴール(クリア)としてクリア画面へ遷移する
-		if(isPlayMode && isRailFinished_ && !hasPendingBranch_){
+		// いったんゴール(クリア)としてクリア画面へ遷移する(オフレール中は判定しない)
+		if(isPlayMode && isOnRail_ && isRailFinished_ && !hasPendingBranch_){
 			sceneManager_->ChangeScene("CLEAR");
 		}
 
@@ -386,6 +397,13 @@ void GameScene::Update(){
 			} else{
 				ImGui::Text("Pending Branch: none");
 			}
+			// ここから追加: オンレール判定・自由移動のデバッグ表示
+			ImGui::Text("On Rail: %s",isOnRail_?"true":"false");
+			if(!isOnRail_){
+				ImGui::Text("Free Velocity Y: %.2f",freeVelocityY_);
+			}
+			ImGui::Text("Jump Key: LSHIFT");
+			// ここまで追加
 			ImGui::End();
 		}
 #endif
@@ -402,19 +420,65 @@ void GameScene::Update(){
 			cameraFacingMarker_->Update();
 		}
 
-		// プレイヤー(人型モデル)をカメラの前方下(レール上)に配置し、進行方向(レールの向き)を向かせる
+		// プレイヤー(人型モデル)をカメラの前方下(基準位置)に配置し、進行方向(基準向き)を向かせる
 		if(player_){
-			Vector3 playerPos = railPos + cameraForward * kCameraBackOffset_;
-			playerPos.y -= kPlayerDownOffset_; // スプラトゥーン風に、レール位置よりさらに下に表示する
+			Vector3 playerPos = basePos + cameraForward * kCameraBackOffset_;
+			playerPos.y -= kPlayerDownOffset_; // スプラトゥーン風に、基準位置よりさらに下に表示する
 
 			player_->SetTranslate(playerPos);
-			player_->SetRotate(railRot);
+			player_->SetRotate(baseRot);
 			player_->SetScale({kPlayerScale_, kPlayerScale_, kPlayerScale_}); // 小さめのスケールで表示
 			if(Camera* activeCamera = CameraManager::GetInstance()->GetActiveCamera()){
 				player_->SetCamera(activeCamera);
 			}
 			player_->Update();
 		}
+
+		// ここから追加: プレイヤーの自立(ジャンプ+WASD移動)
+		// オンレール中はジャンプ入力でレールを離れて自由移動状態に切り替え、
+		// オフレール中はWASDでの水平移動と重力・ジャンプ初速による垂直移動を行い、
+		// レール座標によるオンレール判定(優先度1で実装)を使って着地先レールへ再度乗り移る
+		if(isPlayMode && input_ && railEditor_){
+			if(isOnRail_){
+				// ジャンプキー(LSHIFT)でレールを離れ、自由移動状態に切り替える
+				if(input_->TriggerKey(DIK_LSHIFT)){
+					isOnRail_ = false;
+					freePosition_ = basePos;
+					freeVelocityY_ = kJumpSpeed_;
+					freeBaseRot_ = baseRot; // 離脱時点の向きをオフレール中のカメラ基準向きとして固定する
+				}
+			} else{
+				// オフレール中はカメラ向き基準(XZ平面)でWASD移動する
+				Vector3 forwardXZ = Normalize(Vector3{cameraForward.x, 0.0f, cameraForward.z});
+				Vector3 rightXZ = Normalize(Vector3{cameraRight.x, 0.0f, cameraRight.z});
+
+				Vector3 moveDir = {0.0f, 0.0f, 0.0f};
+				if(input_->PushKey(DIK_W)) moveDir += forwardXZ;
+				if(input_->PushKey(DIK_S)) moveDir += -forwardXZ;
+				if(input_->PushKey(DIK_D)) moveDir += rightXZ;
+				if(input_->PushKey(DIK_A)) moveDir += -rightXZ;
+				moveDir = Normalize(moveDir);
+
+				freePosition_ += moveDir * kPlayerMoveSpeed_ * deltaTime;
+
+				// 重力を適用してY方向の速度を更新し、位置に反映する
+				freeVelocityY_ -= kPlayerGravity_ * deltaTime;
+				freePosition_.y += freeVelocityY_ * deltaTime;
+
+				// 落下中のみ着地判定を行う(上昇中に離脱直後の位置へ即座に再着地しないようにする)
+				if(freeVelocityY_ <= 0.0f){
+					RailEditor::NearestRailResult nearest = railEditor_->FindNearestRail(freePosition_);
+					if(nearest.railIndex >= 0 && nearest.distance <= kOnRailDistanceThreshold_){
+						railEditor_->SwitchActiveRail(nearest.railIndex);
+						railT_ = nearest.t;
+						isRailFinished_ = false; // 着地先レールを最後まで進めるようにする
+						isOnRail_ = true;
+						freeVelocityY_ = 0.0f;
+					}
+				}
+			}
+		}
+		// ここまで追加
 
 		// 弾の発射処理(SPACEキーを押した瞬間に1発だけ発射する)
 		bool shootTriggered = isPlayMode && input_ && input_->TriggerKey(DIK_SPACE);

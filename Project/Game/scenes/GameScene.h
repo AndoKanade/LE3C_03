@@ -59,6 +59,29 @@ private:
 	// レール終端(railT_=1.0)に到達したかどうか(到達後はループせず停止させる)
 	bool isRailFinished_ = false;
 
+	// ここから追加: レール座標によるオンレール判定
+	// プレイヤーのワールド座標からレール上の最近傍点までの距離を求め、一定範囲内かどうかを判定する
+	bool isOnRail_ = true;
+	// オンレール判定の許容距離(この値以下ならレールに乗っているとみなす)
+	const float kOnRailDistanceThreshold_ = 2.0f;
+	// ここまで追加
+
+	// ここから追加: プレイヤーの自立(ジャンプ+WASD移動)用の状態
+	// オフレール中の基準座標(オンレール中のrailPosに相当する、カメラ・プレイヤーの共通の基準点)
+	Vector3 freePosition_ = {0.0f, 0.0f, 0.0f};
+	// オフレール中のY方向の速度(ジャンプ初速・重力の適用に使用)
+	float freeVelocityY_ = 0.0f;
+	// オフレール中の基準向き(レールを離れた瞬間の向きを固定して保持する)
+	Vector3 freeBaseRot_ = {0.0f, 0.0f, 0.0f};
+
+	// プレイヤーのジャンプ初速(上方向、1秒あたりの速度)
+	const float kJumpSpeed_ = 6.0f;
+	// プレイヤーに適用する重力加速度(1秒あたりの下方向への速度変化量)
+	const float kPlayerGravity_ = 9.8f;
+	// オフレール中のWASD移動速度(1秒あたりの移動量)
+	const float kPlayerMoveSpeed_ = 8.0f;
+	// ここまで追加
+
 	// 前フレームがPlayモードだったか(Playに入った瞬間を検出してリセットするのに使う)
 	bool wasPlayMode_ = false;
 
