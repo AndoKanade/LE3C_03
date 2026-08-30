@@ -207,6 +207,9 @@
     <ClCompile Include="Game\scenes\TitleScene.cpp">
       <Filter>ソース ファイル\Game\Scenes</Filter>
     </ClCompile>
+    <ClCompile Include="Game\scenes\ClearScene.cpp">
+      <Filter>ソース ファイル\Game\Scenes</Filter>
+    </ClCompile>
     <ClCompile Include="Engine\Graphics\3D\SkinCluster.cpp">
       <Filter>ソース ファイル\Engine\Graphics\3D</Filter>
     </ClCompile>
@@ -334,6 +337,9 @@
       <Filter>ヘッダー ファイル\Game\Scenes</Filter>
     </ClInclude>
     <ClInclude Include="Game\scenes\TitleScene.h">
+      <Filter>ヘッダー ファイル\Game\Scenes</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\scenes\ClearScene.h">
       <Filter>ヘッダー ファイル\Game\Scenes</Filter>
     </ClInclude>
     <ClInclude Include="Engine\Base\TimeManager.h">
