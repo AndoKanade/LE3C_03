@@ -15,6 +15,8 @@ class SkyboxCommon;
 class Application;
 class Sprite;
 class RailEditor;
+class TargetEditor;
+class Enemy;
 
 class GameScene : public BaseScene{
 public:
@@ -31,6 +33,10 @@ public:
 	void Draw() override;
 
 private:
+	// ここから追加: 的の配置エディターの内容をシーンの的リストに反映する
+	void SyncTargetsFromEditor();
+	// ここまで追加
+
 	// 外部から受け取るポインタ
 	Obj3dCommon* object3dCommon_ = nullptr;
 	Input* input_ = nullptr;
@@ -44,6 +50,10 @@ private:
 	// レールエディター
 	std::unique_ptr<RailEditor> railEditor_;
 
+	// ここから追加: 的の配置エディター(的の座標はこちらが保持し、シーン側は毎フレーム同期する)
+	std::unique_ptr<TargetEditor> targetEditor_;
+	// ここまで追加
+
 	// プレイヤー(三人称視点用の人型モデル)
 	std::unique_ptr<Obj3D> player_;
 	// プレイヤーモデルの表示スケール
@@ -51,6 +61,14 @@ private:
 	// プレイヤーモデルをレール位置よりさらに下げるオフセット
 	// 注意: カメラのFOV(1.0472rad≒60度)を超えて大きくしすぎると視野から外れて描画されなくなる
 	const float kPlayerDownOffset_ = 0.1f;
+
+	// ここから追加: 雑魚敵(固定パターンで往復移動し、プレイヤーを検知すると向きを変える)
+	std::unique_ptr<Enemy> enemy_;
+	// 雑魚敵を配置するレール進行度(レールの中間地点)
+	const float kEnemySpawnRailT_ = 0.5f;
+	// 雑魚敵をレールより上に置くオフセット
+	const float kEnemyUpOffset_ = 1.0f;
+	// ここまで追加
 
 	// レール移動の進行度(0〜1)と速度
 	float railT_ = 0.0f;
@@ -124,9 +142,6 @@ private:
 		bool isAlive = true;
 	};
 	std::vector<Target> targets_;
-
-	// Hierarchy/Inspectorで選択中の的のインデックス(-1は未選択)
-	int selectedTargetIndex_ = -1;
 
 	// 弾(プロジェクタイル)。プレイヤーが発射し、的との距離判定でヒットを取る
 	struct Bullet{

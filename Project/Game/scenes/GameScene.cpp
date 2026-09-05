@@ -24,6 +24,10 @@
 
 // レールエディター
 #include "Editor/RailEditor.h"
+// 的の配置エディター
+#include "Editor/TargetEditor.h"
+// 雑魚敵
+#include "objects/Enemy.h"
 
 namespace{
 	// スカイボックスのテクスチャパス
@@ -108,8 +112,14 @@ void GameScene::Initialize(Obj3dCommon* object3dCommon,Input* input,SpriteCommon
 	cameraFacingMarker_->Initialize(object3dCommon_);
 	cameraFacingMarker_->SetModel("Sphere/sphere.obj");
 
+	// ここから追加: 的の配置エディターの生成と初期化(保存済みJSONがあればここで読み込まれる)
+	targetEditor_ = std::make_unique<TargetEditor>();
+	targetEditor_->Initialize();
+	// ここまで追加
+
+	// 保存済みの配置が無い初回起動時のみ、従来どおりレール沿いの自動配置で初期データを作る
 	// 的をレール沿いの複数の進行度(t)に、左右・上下・奥行き(進行方向)へオフセットして配置(ゲームらしく散らばらせる)
-	if(railEditor_){
+	if(railEditor_ && targetEditor_->GetTargetCount() == 0){
 		constexpr size_t kTargetCount = 16;                  // 的の個数
 		constexpr float kTargetRailTMin = 0.08f;             // 配置開始位置(レール進行度)
 		constexpr float kTargetRailTMax = 0.92f;             // 配置終了位置(レール進行度)
@@ -137,15 +147,32 @@ void GameScene::Initialize(Obj3dCommon* object3dCommon,Input* input,SpriteCommon
 
 			Vector3 pos = basePos + right * side + kWorldUp * up + forward * forwardOffset;
 
-			Target target;
-			target.obj = std::make_unique<Obj3D>();
-			target.obj->Initialize(object3dCommon_);
-			target.obj->SetModel("Sphere/sphere.obj");
-			target.position = pos;
-			target.isAlive = true;
-			targets_.push_back(std::move(target));
+			// 座標は配置エディター側が保持する(描画用オブジェクトはSyncTargetsFromEditorで生成される)
+			targetEditor_->AddTargetAt(pos);
 		}
+
+		// 自動配置直後は何も選択していない状態にしておく
+		targetEditor_->SetSelectedIndex(-1);
 	}
+
+	// 配置エディターの内容をシーンの的リストへ反映する
+	SyncTargetsFromEditor();
+
+	// ここから追加: 雑魚敵の生成
+	// レールの中間地点の少し上に置き、レールに対して直角な方向へ往復させる
+	enemy_ = std::make_unique<Enemy>();
+	if(railEditor_){
+		constexpr Vector3 kEnemyWorldUp = {0.0f, 1.0f, 0.0f};
+
+		Vector3 enemyBasePos = railEditor_->GetPositionOnRail(kEnemySpawnRailT_);
+		Vector3 enemyRailForward = railEditor_->GetForwardOnRail(kEnemySpawnRailT_);
+		Vector3 enemyPatrolDir = Normalize(Cross(kEnemyWorldUp,enemyRailForward));
+
+		enemy_->Initialize(object3dCommon_,enemyBasePos + kEnemyWorldUp * kEnemyUpOffset_,enemyPatrolDir);
+	} else{
+		enemy_->Initialize(object3dCommon_,{0.0f, 0.0f, 0.0f},{1.0f, 0.0f, 0.0f});
+	}
+	// ここまで追加
 
 	// 画面中央固定のレティクルを生成(外枠+中心ドットの2枚構成)
 	TextureManager::GetInstance()->LoadTexture("resource/Reticle/reticleOutline.png");
@@ -177,6 +204,37 @@ void GameScene::Initialize(Obj3dCommon* object3dCommon,Input* input,SpriteCommon
 // シーンの終了処理
 void GameScene::Finalize(){}
 
+// ここから追加: 的の配置エディターの内容をシーンの的リストに反映する
+// 個数が変わったときだけ描画用オブジェクトを生成・削除し、毎フレームの生成を避ける
+void GameScene::SyncTargetsFromEditor(){
+	if(!targetEditor_){
+		return;
+	}
+
+	size_t editorCount = static_cast<size_t>(targetEditor_->GetTargetCount());
+
+	// 足りない分の的を生成する(生成時のみモデルの初期化を行う)
+	while(targets_.size() < editorCount){
+		Target target;
+		target.obj = std::make_unique<Obj3D>();
+		target.obj->Initialize(object3dCommon_);
+		target.obj->SetModel("Sphere/sphere.obj");
+		target.isAlive = true;
+		targets_.push_back(std::move(target));
+	}
+
+	// 多すぎる分の的を末尾から削除する
+	while(targets_.size() > editorCount){
+		targets_.pop_back();
+	}
+
+	// 座標をエディターの配置内容で上書きする
+	for(size_t i = 0; i < targets_.size(); ++i){
+		targets_[i].position = targetEditor_->GetTargetPosition(static_cast<int>(i));
+	}
+}
+// ここまで追加
+
 // シーンの更新処理
 void GameScene::Update(){
 	// スカイボックスの更新
@@ -197,6 +255,14 @@ void GameScene::Update(){
 	if(railEditor_){
 		railEditor_->Update();
 	}
+
+	// ここから追加: 的の配置エディターの更新(配置モード中のドラッグ移動もここで処理される)
+	if(targetEditor_){
+		targetEditor_->Update();
+		// 編集結果(追加・削除・ドラッグ移動)をシーンの的リストへ反映する
+		SyncTargetsFromEditor();
+	}
+	// ここまで追加
 
 	// レール進行度を時間で進めて、カメラをレール上に乗せる
 	if(railEditor_){
@@ -240,6 +306,12 @@ void GameScene::Update(){
 			// ここから追加: オンレール/オフレールの状態もリセットし、必ずオンレールから開始する
 			isOnRail_ = true;
 			freeVelocityY_ = 0.0f;
+			// ここまで追加
+
+			// ここから追加: 雑魚敵も撃破前の初期状態から始める
+			if(enemy_){
+				enemy_->Reset();
+			}
 			// ここまで追加
 		}
 		wasPlayMode_ = isPlayMode;
@@ -404,6 +476,12 @@ void GameScene::Update(){
 			}
 			ImGui::Text("Jump Key: LSHIFT");
 			// ここまで追加
+			// ここから追加: 雑魚敵のデバッグ表示
+			if(enemy_){
+				ImGui::Text("Enemy Alive: %s",enemy_->IsAlive()?"true":"false");
+				ImGui::Text("Enemy Detecting Player: %s",enemy_->IsDetectingPlayer()?"true":"false");
+			}
+			// ここまで追加
 			ImGui::End();
 		}
 #endif
@@ -421,10 +499,11 @@ void GameScene::Update(){
 		}
 
 		// プレイヤー(人型モデル)をカメラの前方下(基準位置)に配置し、進行方向(基準向き)を向かせる
-		if(player_){
-			Vector3 playerPos = basePos + cameraForward * kCameraBackOffset_;
-			playerPos.y -= kPlayerDownOffset_; // スプラトゥーン風に、基準位置よりさらに下に表示する
+		// 座標は雑魚敵の検知判定にも使うため、if文の外で求めておく
+		Vector3 playerPos = basePos + cameraForward * kCameraBackOffset_;
+		playerPos.y -= kPlayerDownOffset_; // スプラトゥーン風に、基準位置よりさらに下に表示する
 
+		if(player_){
 			player_->SetTranslate(playerPos);
 			player_->SetRotate(baseRot);
 			player_->SetScale({kPlayerScale_, kPlayerScale_, kPlayerScale_}); // 小さめのスケールで表示
@@ -433,6 +512,14 @@ void GameScene::Update(){
 			}
 			player_->Update();
 		}
+
+		// ここから追加: 雑魚敵の更新
+		// 固定パターンでの往復移動とプレイヤー検知による向きの変更を行う
+		// Edit中はゲームを静止させるため、経過時間を0にして表示更新のみ行わせる
+		if(enemy_){
+			enemy_->Update(playerPos,isPlayMode?deltaTime:0.0f);
+		}
+		// ここまで追加
 
 		// ここから追加: プレイヤーの自立(ジャンプ+WASD移動)
 		// オンレール中はジャンプ入力でレールを離れて自由移動状態に切り替え、
@@ -548,6 +635,22 @@ void GameScene::Update(){
 				target.obj->Update();
 			}
 		}
+
+		// ここから追加: 雑魚敵の撃破判定
+		// 的と同じく、生存している弾との中心間距離が敵の当たり半径以下ならヒットとする
+		if(enemy_ && enemy_->IsAlive()){
+			for(auto& bullet : bullets_){
+				if(!bullet.isAlive) continue;
+				if(Length(enemy_->GetPosition() - bullet.position) <= enemy_->GetHitRadius()){
+					// 撃破位置に火花パーティクルを発生させてから撃破状態にする
+					ParticleManager::GetInstance()->EmitSpark(enemy_->GetPosition());
+					enemy_->Kill();
+					bullet.isAlive = false;
+					break;
+				}
+			}
+		}
+		// ここまで追加
 
 		// 命中または生存時間切れで消えた弾をリストから削除する
 		bullets_.erase(
@@ -702,9 +805,11 @@ void GameScene::Update(){
 			// 行ラベル(倒された的は (dead) を付ける)
 			char label[32];
 			snprintf(label,sizeof(label),"Target %d%s",i,targets_[i].isAlive?"":" (dead)");
-			// クリックで選択。選択中の行はハイライトされる
-			if(ImGui::Selectable(label,selectedTargetIndex_ == i)){
-				selectedTargetIndex_ = i;
+			// クリックで選択。選択中の行はハイライトされる(選択状態は配置エディターが保持する)
+			if(ImGui::Selectable(label,targetEditor_ && targetEditor_->GetSelectedIndex() == i)){
+				if(targetEditor_){
+					targetEditor_->SetSelectedIndex(i);
+				}
 			}
 			ImGui::PopID();
 		}
@@ -713,14 +818,14 @@ void GameScene::Update(){
 		// Inspectorの最小版
 		// 右・上段に配置
 		EditorWidgets::BeginFixedPanel("Inspector",L.inspector);
-		if(selectedTargetIndex_ >= 0 && selectedTargetIndex_ < static_cast<int>(targets_.size())){
-			Target& sel = targets_[selectedTargetIndex_];
-			ImGui::Text("Target %d",selectedTargetIndex_);
+		int selectedTargetIndex = targetEditor_?targetEditor_->GetSelectedIndex():-1;
+		if(selectedTargetIndex >= 0 && selectedTargetIndex < static_cast<int>(targets_.size())){
+			ImGui::Text("Target %d",selectedTargetIndex);
 			ImGui::Separator();
-			// 位置を[-]/[+]ボタンで編集。毎フレーム obj->SetTranslate(position) しているので即座に反映される
-			EditorWidgets::ButtonVector3("Position",sel.position,0.1f,1.0f);
+			// 位置は配置エディターのデータを直接編集する(次フレームのSyncTargetsFromEditorで反映される)
+			EditorWidgets::ButtonVector3("Position",targetEditor_->GetTargetPositionRef(selectedTargetIndex),0.1f,1.0f);
 			// 生存フラグ(OFFで非表示、ONで復活)
-			ImGui::Checkbox("Alive",&sel.isAlive);
+			ImGui::Checkbox("Alive",&targets_[selectedTargetIndex].isAlive);
 		} else{
 			ImGui::TextDisabled("Select a target in Hierarchy");
 		}
@@ -742,6 +847,12 @@ void GameScene::Draw(){
 	if(player_){
 		player_->Draw();
 	}
+
+	// ここから追加: 雑魚敵を描画(撃破済みのときはEnemy側で描画をスキップする)
+	if(enemy_){
+		enemy_->Draw();
+	}
+	// ここまで追加
 
 	// カメラ位置・向きのデバッグマーカーを描画(ON/OFF切り替え可能)
 	// Playモード中はギズモとして隠す(実行画面には出さない)
