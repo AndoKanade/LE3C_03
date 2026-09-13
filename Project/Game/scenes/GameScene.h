@@ -70,6 +70,20 @@ private:
 	const float kEnemyUpOffset_ = 1.0f;
 	// ここまで追加
 
+	// ここから追加: プレイヤーの体力と被弾処理
+	// 現在の体力(0になるとそれ以上減らない)
+	int playerHp_ = 3;
+	// 被弾後の無敵時間の残り(秒)。0より大きい間は敵弾が当たっても体力が減らない
+	float playerInvincibleTimer_ = 0.0f;
+
+	// 体力の最大値(Play開始時にこの値へ戻す)
+	const int kPlayerMaxHp_ = 3;
+	// 敵弾が命中したとみなす、プレイヤー中心からの距離
+	const float kPlayerHitRadius_ = 1.0f;
+	// 被弾してから次に被弾できるようになるまでの無敵時間(秒)
+	const float kPlayerInvincibleTime_ = 1.0f;
+	// ここまで追加
+
 	// レール移動の進行度(0〜1)と速度
 	float railT_ = 0.0f;
 	float railSpeed_ = 0.05f; // 1秒あたりの進行量
