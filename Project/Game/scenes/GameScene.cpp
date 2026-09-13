@@ -313,6 +313,11 @@ void GameScene::Update(){
 				enemy_->Reset();
 			}
 			// ここまで追加
+
+			// ここから追加: プレイヤーの体力・無敵時間も初期状態に戻す
+			playerHp_ = kPlayerMaxHp_;
+			playerInvincibleTimer_ = 0.0f;
+			// ここまで追加
 		}
 		wasPlayMode_ = isPlayMode;
 
@@ -480,7 +485,14 @@ void GameScene::Update(){
 			if(enemy_){
 				ImGui::Text("Enemy Alive: %s",enemy_->IsAlive()?"true":"false");
 				ImGui::Text("Enemy Detecting Player: %s",enemy_->IsDetectingPlayer()?"true":"false");
+				// ここから追加: 敵弾の発射状況
+				ImGui::Text("Enemy Bullets: %d",enemy_->GetActiveBulletCount());
+				// ここまで追加
 			}
+			// ここまで追加
+			// ここから追加: プレイヤーの体力・無敵時間のデバッグ表示
+			ImGui::Text("Player HP: %d / %d",playerHp_,kPlayerMaxHp_);
+			ImGui::Text("Player Invincible: %.2f",playerInvincibleTimer_);
 			// ここまで追加
 			ImGui::End();
 		}
@@ -518,6 +530,30 @@ void GameScene::Update(){
 		// Edit中はゲームを静止させるため、経過時間を0にして表示更新のみ行わせる
 		if(enemy_){
 			enemy_->Update(playerPos,isPlayMode?deltaTime:0.0f);
+		}
+		// ここまで追加
+
+		// ここから追加: 敵弾とプレイヤーの当たり判定
+		// Playモード中のみ判定する。連続被弾で一瞬に体力が尽きないよう、被弾後は一定時間無敵にする
+		if(isPlayMode && enemy_){
+			// 無敵時間の経過を進める
+			if(playerInvincibleTimer_ > 0.0f){
+				playerInvincibleTimer_ -= deltaTime;
+				if(playerInvincibleTimer_ < 0.0f){
+					playerInvincibleTimer_ = 0.0f;
+				}
+			}
+
+			// 命中した弾は無敵中でもここで消滅させ、すり抜けて後から当たらないようにする
+			int hitCount = enemy_->CheckHitToPlayer(playerPos,kPlayerHitRadius_);
+			if(hitCount > 0 && playerInvincibleTimer_ <= 0.0f && playerHp_ > 0){
+				// 同時に複数当たっても体力の減少は1回分だけにする
+				--playerHp_;
+				playerInvincibleTimer_ = kPlayerInvincibleTime_;
+
+				// 被弾位置に火花パーティクルを発生させ、当たったことを見た目で分かるようにする
+				ParticleManager::GetInstance()->EmitSpark(playerPos);
+			}
 		}
 		// ここまで追加
 

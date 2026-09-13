@@ -10,6 +10,9 @@
 namespace{
 	// 雑魚敵の表示に使用するモデル(プレイヤーと区別できるよう別のモーションのモデルを使う)
 	const std::string kEnemyModelPath = "human/sneakWalk.gltf";
+	// ここから追加: 敵弾の表示に使用するモデル
+	const std::string kEnemyBulletModelPath = "Sphere/sphere.obj";
+	// ここまで追加
 }
 
 Enemy::Enemy() = default;
@@ -26,6 +29,18 @@ void Enemy::Initialize(Obj3dCommon* objCommon,const Vector3& basePosition,const 
 	basePosition_ = basePosition;
 	patrolDirection_ = Normalize(patrolDirection);
 
+	// ここから追加: 敵弾の生成
+	// 発射のたびに生成すると無駄な処理が毎フレーム発生するため、ここで最大数ぶんまとめて作り、以降は使い回す
+	ModelManager::GetInstance()->LoadModel(kEnemyBulletModelPath);
+	bullets_.resize(kMaxBulletCount);
+	for(auto& bullet : bullets_){
+		bullet.obj = std::make_unique<Obj3D>();
+		bullet.obj->Initialize(objCommon);
+		bullet.obj->SetModel(kEnemyBulletModelPath);
+		bullet.obj->SetScale({kBulletScale, kBulletScale, kBulletScale});
+	}
+	// ここまで追加
+
 	Reset();
 }
 
@@ -37,6 +52,14 @@ void Enemy::Reset(){
 	rotationY_ = 0.0f;
 	isAlive_ = true;
 	isDetectingPlayer_ = false;
+
+	// ここから追加: 発射済みの弾をすべて未使用に戻し、発射間隔も初期化する
+	for(auto& bullet : bullets_){
+		bullet.isAlive = false;
+		bullet.lifeTime = 0.0f;
+	}
+	shotTimer_ = kShotInterval;
+	// ここまで追加
 }
 
 // 撃破する
@@ -46,6 +69,10 @@ void Enemy::Kill(){
 
 // 更新処理
 void Enemy::Update(const Vector3& playerPosition,float deltaTime){
+	// ここから追加: 撃破済みでも発射済みの弾は飛び続けさせるため、弾の更新は本体より先に行う
+	UpdateBullets(deltaTime);
+	// ここまで追加
+
 	// 撃破済みのときは移動も向きの更新も行わない
 	if(!isAlive_){
 		return;
@@ -66,6 +93,20 @@ void Enemy::Update(const Vector3& playerPosition,float deltaTime){
 	// プレイヤーの検知判定(検知範囲内かどうか)
 	Vector3 toPlayer = playerPosition - position_;
 	isDetectingPlayer_ = (Length(toPlayer) <= kDetectionRange);
+
+	// ここから追加: 弾の発射処理
+	// プレイヤーを検知している間だけ、一定間隔でプレイヤーへ向けて撃つ
+	if(isDetectingPlayer_){
+		shotTimer_ -= deltaTime;
+		if(shotTimer_ <= 0.0f){
+			FireBullet(playerPosition);
+			shotTimer_ = kShotInterval;
+		}
+	} else{
+		// 非検知中は撃たない。次に検知した直後に即撃ちされないよう、待ち時間を戻しておく
+		shotTimer_ = kShotInterval;
+	}
+	// ここまで追加
 
 	// 向きの決定
 	// 検知中はプレイヤーの方向、非検知中は移動している方向を向く
@@ -91,10 +132,109 @@ void Enemy::Update(const Vector3& playerPosition,float deltaTime){
 	}
 }
 
-// 描画処理(撃破済みのときは描画しない)
+// 描画処理(撃破済みのときは本体を描画しない。発射済みの弾は残っていれば描画する)
 void Enemy::Draw(){
-	if(!isAlive_ || !obj_){
+	if(isAlive_ && obj_){
+		obj_->Draw();
+	}
+
+	// ここから追加: 発射中の弾を描画する
+	for(auto& bullet : bullets_){
+		if(bullet.isAlive && bullet.obj){
+			bullet.obj->Draw();
+		}
+	}
+	// ここまで追加
+}
+
+// ここから追加: 弾の更新処理(移動・寿命切れの判定・描画用トランスフォームの更新)
+void Enemy::UpdateBullets(float deltaTime){
+	// アクティブカメラは全弾で共通なので、ループの外で一度だけ取得する
+	Camera* activeCamera = CameraManager::GetInstance()->GetActiveCamera();
+
+	for(auto& bullet : bullets_){
+		// 未使用の弾は移動も描画更新も不要
+		if(!bullet.isAlive){
+			continue;
+		}
+
+		// 等速直線運動で前進させる(プレイヤーが避けやすいよう重力は掛けない)
+		bullet.position += bullet.velocity * deltaTime;
+
+		// 何にも当たらなかった弾は一定時間で未使用に戻し、再利用できるようにする
+		bullet.lifeTime += deltaTime;
+		if(bullet.lifeTime >= kBulletLifeTime){
+			bullet.isAlive = false;
+			continue;
+		}
+
+		// 描画用オブジェクトへ反映する
+		if(bullet.obj){
+			bullet.obj->SetTranslate(bullet.position);
+			if(activeCamera){
+				bullet.obj->SetCamera(activeCamera);
+			}
+			bullet.obj->Update();
+		}
+	}
+}
+// ここまで追加
+
+// ここから追加: プレイヤーへ向けて弾を1発発射する
+void Enemy::FireBullet(const Vector3& playerPosition){
+	// 未使用の弾を探して使い回す(全弾使用中のときは発射しない)
+	for(auto& bullet : bullets_){
+		if(bullet.isAlive){
+			continue;
+		}
+
+		// 発射位置は敵の中心より少し上(胸の高さ)にする
+		Vector3 spawnPosition = position_;
+		spawnPosition.y += kBulletSpawnUpOffset;
+
+		// 発射した瞬間のプレイヤー位置へ向かう方向を求める(以降は追尾しない)
+		Vector3 toPlayer = playerPosition - spawnPosition;
+		if(Length(toPlayer) < 1e-5f){
+			return; // プレイヤーと発射位置がほぼ同じ場合は方向が定まらないため撃たない
+		}
+
+		bullet.position = spawnPosition;
+		bullet.velocity = Normalize(toPlayer) * kBulletSpeed;
+		bullet.lifeTime = 0.0f;
+		bullet.isAlive = true;
 		return;
 	}
-	obj_->Draw();
 }
+// ここまで追加
+
+// ここから追加: 発射済みの弾とプレイヤーの当たり判定
+int Enemy::CheckHitToPlayer(const Vector3& playerPosition,float playerHitRadius){
+	int hitCount = 0;
+
+	for(auto& bullet : bullets_){
+		if(!bullet.isAlive){
+			continue;
+		}
+
+		// 弾とプレイヤーの中心間距離が許容半径以下なら命中とみなし、その弾を未使用に戻す
+		if(Length(playerPosition - bullet.position) <= playerHitRadius){
+			bullet.isAlive = false;
+			++hitCount;
+		}
+	}
+
+	return hitCount;
+}
+// ここまで追加
+
+// ここから追加: 発射済みで生存している弾の数を取得(デバッグ表示用)
+int Enemy::GetActiveBulletCount() const{
+	int count = 0;
+	for(const auto& bullet : bullets_){
+		if(bullet.isAlive){
+			++count;
+		}
+	}
+	return count;
+}
+// ここまで追加
