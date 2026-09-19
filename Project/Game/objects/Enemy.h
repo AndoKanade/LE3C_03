@@ -25,7 +25,8 @@ public:
 	/// <param name="objCommon">3Dオブジェクト共通設定</param>
 	/// <param name="basePosition">往復移動の中心となるワールド座標</param>
 	/// <param name="patrolDirection">往復移動を行う方向(内部で正規化する)</param>
-	void Initialize(Obj3dCommon* objCommon,const Vector3& basePosition,const Vector3& patrolDirection);
+	/// <param name="maxHp">体力の最大値(この値からのHPで開始する)</param>
+	void Initialize(Obj3dCommon* objCommon,const Vector3& basePosition,const Vector3& patrolDirection,int maxHp);
 
 	/// <summary>
 	/// 更新処理
@@ -41,6 +42,29 @@ public:
 	void Reset();
 	// 撃破する
 	void Kill();
+
+	// ここから追加: 敵の体力
+	/// <summary>
+	/// 体力を減らす(撃破済みのときは何もしない)
+	/// </summary>
+	/// <param name="damage">減らす体力の量</param>
+	/// <returns>このダメージで撃破されたときtrue</returns>
+	bool TakeDamage(int damage);
+
+	// 現在の体力を取得
+	int GetHp() const{ return hp_; }
+	// 体力の最大値を取得
+	int GetMaxHp() const{ return maxHp_; }
+	// ここまで追加
+
+	// ここから追加: 配置エディターからの編集内容を反映するための設定関数
+	// 往復移動の中心座標を設定する(現在の往復位置を保ったまま移動させる)
+	void SetBasePosition(const Vector3& basePosition);
+	// 往復移動の方向を設定する(内部で正規化する)
+	void SetPatrolDirection(const Vector3& patrolDirection);
+	// 体力の最大値を設定する(現在の体力が最大値を超える場合は最大値に合わせる)
+	void SetMaxHp(int maxHp);
+	// ここまで追加
 
 	// ここから追加: 敵弾とプレイヤーの当たり判定
 	/// <summary>
@@ -99,6 +123,11 @@ private:
 	bool isAlive_ = true;             // 生存フラグ(falseで撃破済み)
 	bool isDetectingPlayer_ = false;  // プレイヤーを検知しているかどうか
 
+	// ここから追加: 敵の体力(0になると撃破される)
+	int maxHp_ = kDefaultMaxHp; // 体力の最大値(配置エディターで敵ごとに設定できる)
+	int hp_ = kDefaultMaxHp;    // 現在の体力
+	// ここまで追加
+
 	// 往復移動の速度(1秒あたりの移動量)
 	static constexpr float kMoveSpeed = 3.0f;
 	// 中心座標から片側へ動ける距離(この距離に達すると折り返す)
@@ -109,6 +138,13 @@ private:
 	static constexpr float kHitRadius = 1.0f;
 	// 表示スケール
 	static constexpr float kScale = 0.4f;
+
+	// ここから追加: 体力のパラメータ
+	// 体力の最大値の初期値(配置エディターで指定が無いときに使う)
+	static constexpr int kDefaultMaxHp = 3;
+	// 体力の最大値として設定できる下限(0以下にすると生成直後に撃破されてしまうため)
+	static constexpr int kMinMaxHp = 1;
+	// ここまで追加
 
 	// ここから追加: 敵弾のパラメータ
 	// 同時に存在できる弾の最大数(この数だけ初期化時に生成して使い回す)

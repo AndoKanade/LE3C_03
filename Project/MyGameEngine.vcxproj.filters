@@ -216,6 +216,9 @@
     <ClCompile Include="Game\scenes\ClearScene.cpp">
       <Filter>ソース ファイル\Game\Scenes</Filter>
     </ClCompile>
+    <ClCompile Include="Game\scenes\GameOverScene.cpp">
+      <Filter>ソース ファイル\Game\Scenes</Filter>
+    </ClCompile>
     <ClCompile Include="Engine\Graphics\3D\SkinCluster.cpp">
       <Filter>ソース ファイル\Engine\Graphics\3D</Filter>
     </ClCompile>
@@ -229,6 +232,9 @@
       <Filter>ソース ファイル\Game\Editor</Filter>
     </ClCompile>
     <ClCompile Include="Game\Editor\TargetEditor.cpp">
+      <Filter>ソース ファイル\Game\Editor</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Editor\EnemyEditor.cpp">
       <Filter>ソース ファイル\Game\Editor</Filter>
     </ClCompile>
     <ClCompile Include="Game\objects\Enemy.cpp">
@@ -354,6 +360,9 @@
     <ClInclude Include="Game\scenes\ClearScene.h">
       <Filter>ヘッダー ファイル\Game\Scenes</Filter>
     </ClInclude>
+    <ClInclude Include="Game\scenes\GameOverScene.h">
+      <Filter>ヘッダー ファイル\Game\Scenes</Filter>
+    </ClInclude>
     <ClInclude Include="Engine\Base\TimeManager.h">
       <Filter>ヘッダー ファイル\Engine\Base</Filter>
     </ClInclude>
@@ -364,6 +373,9 @@
       <Filter>ヘッダー ファイル\Game\Editor</Filter>
     </ClInclude>
     <ClInclude Include="Game\Editor\TargetEditor.h">
+      <Filter>ヘッダー ファイル\Game\Editor</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Editor\EnemyEditor.h">
       <Filter>ヘッダー ファイル\Game\Editor</Filter>
     </ClInclude>
     <ClInclude Include="Game\objects\Enemy.h">

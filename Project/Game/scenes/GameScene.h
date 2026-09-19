@@ -17,6 +17,9 @@ class Sprite;
 class RailEditor;
 class TargetEditor;
 class Enemy;
+// ここから追加: 敵の配置エディター
+class EnemyEditor;
+// ここまで追加
 
 class GameScene : public BaseScene{
 public:
@@ -35,6 +38,10 @@ public:
 private:
 	// ここから追加: 的の配置エディターの内容をシーンの的リストに反映する
 	void SyncTargetsFromEditor();
+	// ここまで追加
+
+	// ここから追加: 敵の配置エディターの内容をシーンの敵リストに反映する
+	void SyncEnemiesFromEditor();
 	// ここまで追加
 
 	// 外部から受け取るポインタ
@@ -62,12 +69,18 @@ private:
 	// 注意: カメラのFOV(1.0472rad≒60度)を超えて大きくしすぎると視野から外れて描画されなくなる
 	const float kPlayerDownOffset_ = 0.1f;
 
+	// ここから追加: 敵の配置エディター(敵の座標・往復方向・体力はこちらが保持し、シーン側は毎フレーム同期する)
+	std::unique_ptr<EnemyEditor> enemyEditor_;
+	// ここまで追加
+
 	// ここから追加: 雑魚敵(固定パターンで往復移動し、プレイヤーを検知すると向きを変える)
-	std::unique_ptr<Enemy> enemy_;
-	// 雑魚敵を配置するレール進行度(レールの中間地点)
+	std::vector<std::unique_ptr<Enemy>> enemies_;
+	// 初回起動時に自動配置する雑魚敵のレール進行度(レールの中間地点)
 	const float kEnemySpawnRailT_ = 0.5f;
 	// 雑魚敵をレールより上に置くオフセット
 	const float kEnemyUpOffset_ = 1.0f;
+	// プレイヤーの弾1発が敵に与えるダメージ量
+	const int kBulletDamageToEnemy_ = 1;
 	// ここまで追加
 
 	// ここから追加: プレイヤーの体力と被弾処理
