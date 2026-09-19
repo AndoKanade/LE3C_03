@@ -19,7 +19,7 @@ Enemy::Enemy() = default;
 Enemy::~Enemy() = default;
 
 // 初期化処理
-void Enemy::Initialize(Obj3dCommon* objCommon,const Vector3& basePosition,const Vector3& patrolDirection){
+void Enemy::Initialize(Obj3dCommon* objCommon,const Vector3& basePosition,const Vector3& patrolDirection,int maxHp){
 	// 描画用モデルの読み込みと3Dオブジェクトの生成
 	ModelManager::GetInstance()->LoadModel(kEnemyModelPath);
 	obj_ = std::make_unique<Obj3D>();
@@ -28,6 +28,10 @@ void Enemy::Initialize(Obj3dCommon* objCommon,const Vector3& basePosition,const 
 
 	basePosition_ = basePosition;
 	patrolDirection_ = Normalize(patrolDirection);
+
+	// ここから追加: 体力の最大値を設定する(Reset()で現在の体力がこの値まで回復する)
+	SetMaxHp(maxHp);
+	// ここまで追加
 
 	// ここから追加: 敵弾の生成
 	// 発射のたびに生成すると無駄な処理が毎フレーム発生するため、ここで最大数ぶんまとめて作り、以降は使い回す
@@ -53,6 +57,10 @@ void Enemy::Reset(){
 	isAlive_ = true;
 	isDetectingPlayer_ = false;
 
+	// ここから追加: 体力を最大値まで戻す
+	hp_ = maxHp_;
+	// ここまで追加
+
 	// ここから追加: 発射済みの弾をすべて未使用に戻し、発射間隔も初期化する
 	for(auto& bullet : bullets_){
 		bullet.isAlive = false;
@@ -65,7 +73,53 @@ void Enemy::Reset(){
 // 撃破する
 void Enemy::Kill(){
 	isAlive_ = false;
+
+	// ここから追加: 撃破時は体力も0にして、表示と状態を食い違わせないようにする
+	hp_ = 0;
+	// ここまで追加
 }
+
+// ここから追加: 体力を減らす(撃破されたときtrueを返す)
+bool Enemy::TakeDamage(int damage){
+	// 撃破済みの敵はこれ以上体力が減らない
+	if(!isAlive_){
+		return false;
+	}
+
+	hp_ -= damage;
+	if(hp_ <= 0){
+		hp_ = 0;
+		isAlive_ = false;
+		return true;
+	}
+
+	return false;
+}
+// ここまで追加
+
+// ここから追加: 往復移動の中心座標を設定する(現在の往復位置を保ったまま移動させる)
+void Enemy::SetBasePosition(const Vector3& basePosition){
+	basePosition_ = basePosition;
+	position_ = basePosition_ + patrolDirection_ * patrolOffset_;
+}
+// ここまで追加
+
+// ここから追加: 往復移動の方向を設定する(内部で正規化する)
+void Enemy::SetPatrolDirection(const Vector3& patrolDirection){
+	patrolDirection_ = Normalize(patrolDirection);
+	position_ = basePosition_ + patrolDirection_ * patrolOffset_;
+}
+// ここまで追加
+
+// ここから追加: 体力の最大値を設定する(現在の体力が最大値を超える場合は最大値に合わせる)
+void Enemy::SetMaxHp(int maxHp){
+	// 0以下だと生成直後に撃破された状態になってしまうため下限で制限する
+	maxHp_ = (maxHp < kMinMaxHp)?kMinMaxHp:maxHp;
+	if(hp_ > maxHp_){
+		hp_ = maxHp_;
+	}
+}
+// ここまで追加
 
 // 更新処理
 void Enemy::Update(const Vector3& playerPosition,float deltaTime){

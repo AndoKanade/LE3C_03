@@ -1,4 +1,4 @@
-#include "TargetEditor.h"
+#include "EnemyEditor.h"
 #include "ImGuiManager.h"
 #include "imgui.h"
 #include "CameraManager.h"
@@ -8,14 +8,15 @@
 #include "WinAPI.h"
 #include "externals/json.hpp"
 #include <cmath>
+#include <cstdio>
 #include <fstream>
 #include <filesystem>
 #include <iomanip>
 #include <string>
 
 namespace{
-	// 的の配置データの保存先ファイルパス(RailEditorと同じくresource配下の相対パス)
-	const std::string kTargetSaveFilePath = "resource/target/target.json";
+	// 敵の配置データの保存先ファイルパス(TargetEditorと同じくresource配下の相対パス)
+	const std::string kEnemySaveFilePath = "resource/enemy/enemy.json";
 
 	// レイと平面が平行かどうかを判定するしきい値(内積の絶対値がこの値未満なら平行とみなす)
 	constexpr float kRayPlaneEpsilon = 1e-6f;
@@ -51,16 +52,16 @@ namespace{
 	}
 }
 
-TargetEditor::TargetEditor() = default;
-TargetEditor::~TargetEditor() = default;
+EnemyEditor::EnemyEditor() = default;
+EnemyEditor::~EnemyEditor() = default;
 
 // 初期化処理(保存済みJSONがあれば読み込む)
-void TargetEditor::Initialize(){
+void EnemyEditor::Initialize(){
 	LoadFromJson();
 }
 
 // 更新処理(ImGuiでの編集UIとマウスドラッグによる移動)
-void TargetEditor::Update(){
+void EnemyEditor::Update(){
 #ifdef USE_IMGUI
 	// Playモード中は配置編集を行わない(ドラッグ状態も解除しておく)
 	if(EditorContext::GetInstance()->IsPlayMode()){
@@ -69,30 +70,30 @@ void TargetEditor::Update(){
 	}
 
 	// 選択中のインデックスが範囲外になっていたら選択解除する(削除・読み込み後など)
-	if(selectedIndex_ >= static_cast<int>(targets_.size())){
+	if(selectedIndex_ >= static_cast<int>(enemies_.size())){
 		selectedIndex_ = -1;
 	}
 
-	// 固定タイルレイアウトの下段・中央左に配置(Enemy EditorやPostProcess Settingsと重ならないようにする)
-	EditorWidgets::BeginFixedPanel("Target Editor",EditorWidgets::ComputeLayout().bottomCenterLeft);
+	// 固定タイルレイアウトの下段・中央右に配置(Target Editorの隣に並ぶ)
+	EditorWidgets::BeginFixedPanel("Enemy Editor",EditorWidgets::ComputeLayout().bottomCenterRight);
 
 	// 配置モードのON/OFF切り替え(ONの間だけSceneビュー上のドラッグ移動を受け付ける)
 	ImGui::Checkbox("Placement Mode",&isPlacementMode_);
-	ImGui::TextDisabled("(Sceneビューで的を左ドラッグすると移動できます)");
+	ImGui::TextDisabled("(Sceneビューで敵を左ドラッグすると移動できます)");
 
 	ImGui::Separator();
 
-	// 的の追加ボタン(カメラの前方に1個生成する)
-	if(ImGui::Button("Add Target")){
-		AddTargetInFrontOfCamera();
+	// 敵の追加ボタン(カメラの前方に1体生成する)
+	if(ImGui::Button("Add Enemy")){
+		AddEnemyInFrontOfCamera();
 	}
 	ImGui::SameLine();
 
-	// 選択中の的の削除ボタン(未選択のときは押せないようにする)
-	bool hasSelection = (selectedIndex_ >= 0 && selectedIndex_ < static_cast<int>(targets_.size()));
+	// 選択中の敵の削除ボタン(未選択のときは押せないようにする)
+	bool hasSelection = (selectedIndex_ >= 0 && selectedIndex_ < static_cast<int>(enemies_.size()));
 	ImGui::BeginDisabled(!hasSelection);
-	if(ImGui::Button("Delete Target")){
-		targets_.erase(targets_.begin() + selectedIndex_);
+	if(ImGui::Button("Delete Enemy")){
+		enemies_.erase(enemies_.begin() + selectedIndex_);
 		selectedIndex_ = -1;
 		isDragging_ = false;
 	}
@@ -109,14 +110,32 @@ void TargetEditor::Update(){
 		LoadFromJson();
 	}
 	ImGui::SameLine();
-	ImGui::Text("(%s)",kTargetSaveFilePath.c_str());
+	ImGui::Text("(%s)",kEnemySaveFilePath.c_str());
 
 	ImGui::Separator();
 
 	// 現在の配置状況の表示(選択・ドラッグ中かどうかの確認用)
-	ImGui::Text("Targets: %d",static_cast<int>(targets_.size()));
+	ImGui::Text("Enemies: %d",static_cast<int>(enemies_.size()));
 	ImGui::Text("Selected: %d",selectedIndex_);
 	ImGui::Text("Dragging: %s",isDragging_?"true":"false");
+
+	ImGui::Separator();
+
+	// 選択中の敵ごとのパラメータ編集
+	DrawSelectedEnemyUI();
+
+	ImGui::Separator();
+
+	// 配置されている敵の一覧(クリックで選択できるようにする)
+	for(int i = 0; i < static_cast<int>(enemies_.size()); ++i){
+		ImGui::PushID(i);
+		char label[64];
+		snprintf(label,sizeof(label),"Enemy %d (HP %d)",i,enemies_[i].maxHp);
+		if(ImGui::Selectable(label,selectedIndex_ == i)){
+			selectedIndex_ = i;
+		}
+		ImGui::PopID();
+	}
 
 	ImGui::End();
 
@@ -125,12 +144,44 @@ void TargetEditor::Update(){
 #endif
 }
 
-// 現在のカメラの前方に的を1個追加する(Add Targetボタン用)
-void TargetEditor::AddTargetInFrontOfCamera(){
+// 選択中の敵のパラメータ(座標・往復方向・体力)を編集するUIを表示する
+void EnemyEditor::DrawSelectedEnemyUI(){
+#ifdef USE_IMGUI
+	// 未選択のときは編集対象が無いことを表示するだけにする
+	if(selectedIndex_ < 0 || selectedIndex_ >= static_cast<int>(enemies_.size())){
+		ImGui::TextDisabled("Select an enemy");
+		return;
+	}
+
+	EnemyPoint& enemy = enemies_[selectedIndex_];
+
+	ImGui::Text("Enemy %d",selectedIndex_);
+
+	// 往復移動の中心となるワールド座標
+	EditorWidgets::ButtonVector3("Position",enemy.position,0.1f,1.0f);
+
+	// 往復移動の方向(0ベクトルになると向きが定まらないため既定値へ戻す)
+	if(EditorWidgets::ButtonVector3("Patrol Dir",enemy.patrolDirection,0.1f,1.0f)){
+		if(Length(enemy.patrolDirection) < kMinPatrolDirectionLength){
+			enemy.patrolDirection = kDefaultPatrolDirection;
+		}
+	}
+
+	// 体力の最大値(下限を下回らないように制限する)
+	if(EditorWidgets::ButtonInt("Max HP",enemy.maxHp,1,5)){
+		if(enemy.maxHp < kMinMaxHp){
+			enemy.maxHp = kMinMaxHp;
+		}
+	}
+#endif
+}
+
+// 現在のカメラの前方に敵を1体追加する(Add Enemyボタン用)
+void EnemyEditor::AddEnemyInFrontOfCamera(){
 	Camera* camera = CameraManager::GetInstance()->GetActiveCamera();
 	if(!camera){
 		// カメラが無い場合は原点に置く
-		AddTargetAt({0.0f, 0.0f, 0.0f});
+		AddEnemyAt({0.0f, 0.0f, 0.0f},kDefaultPatrolDirection,kDefaultMaxHp);
 		return;
 	}
 
@@ -138,22 +189,27 @@ void TargetEditor::AddTargetInFrontOfCamera(){
 	const Matrix4x4& world = camera->GetWorldMatrix();
 	Vector3 forward = Normalize(Vector3{world.m[2][0], world.m[2][1], world.m[2][2]});
 
-	AddTargetAt(camera->GetTranslate() + forward * kSpawnDistance);
+	AddEnemyAt(camera->GetTranslate() + forward * kSpawnDistance,kDefaultPatrolDirection,kDefaultMaxHp);
 }
 
-// 指定座標に的を1個追加する(初回起動時の初期配置生成用)
-void TargetEditor::AddTargetAt(const Vector3& position){
-	TargetPoint point{};
+// 指定の内容で敵を1体追加する(初回起動時の初期配置生成用)
+void EnemyEditor::AddEnemyAt(const Vector3& position,const Vector3& patrolDirection,int maxHp){
+	EnemyPoint point{};
 	point.position = position;
-	targets_.push_back(point);
 
-	// 追加した的をそのまま選択状態にして、すぐ動かせるようにする
-	selectedIndex_ = static_cast<int>(targets_.size()) - 1;
+	// 往復方向が0ベクトルだと動きが定まらないため既定値に置き換える
+	point.patrolDirection = (Length(patrolDirection) < kMinPatrolDirectionLength)?kDefaultPatrolDirection:patrolDirection;
+	point.maxHp = (maxHp < kMinMaxHp)?kMinMaxHp:maxHp;
+
+	enemies_.push_back(point);
+
+	// 追加した敵をそのまま選択状態にして、すぐ動かせるようにする
+	selectedIndex_ = static_cast<int>(enemies_.size()) - 1;
 }
 
 // Editモード中にゲーム画面が実際に描かれている矩形(レターボックス適用後)を求める
 // Application.cppのビューポート計算と同じ手順で求めることで、マウス座標と描画結果を一致させる
-bool TargetEditor::ComputeGameViewportRect(float& outX,float& outY,float& outW,float& outH) const{
+bool EnemyEditor::ComputeGameViewportRect(float& outX,float& outY,float& outW,float& outH) const{
 	const EditorRect& sceneRect = EditorContext::GetInstance()->GetSceneViewRect();
 	if(sceneRect.w <= 0.0f || sceneRect.h <= 0.0f){
 		return false;
@@ -182,7 +238,7 @@ bool TargetEditor::ComputeGameViewportRect(float& outX,float& outY,float& outW,f
 }
 
 // 現在のマウス位置から伸びるレイを求める(画面外・カメラ未取得のときはfalse)
-bool TargetEditor::ComputeMouseRay(PickRay& outRay) const{
+bool EnemyEditor::ComputeMouseRay(PickRay& outRay) const{
 #ifdef USE_IMGUI
 	float viewX = 0.0f, viewY = 0.0f, viewW = 0.0f, viewH = 0.0f;
 	if(!ComputeGameViewportRect(viewX,viewY,viewW,viewH)){
@@ -219,27 +275,27 @@ bool TargetEditor::ComputeMouseRay(PickRay& outRay) const{
 #endif
 }
 
-// レイに最も近い的のインデックスを求める(掴める距離に無ければ-1)
-int TargetEditor::PickTargetIndex(const PickRay& ray) const{
+// レイに最も近い敵のインデックスを求める(掴める距離に無ければ-1)
+int EnemyEditor::PickEnemyIndex(const PickRay& ray) const{
 	int bestIndex = -1;
 	float bestDistanceAlongRay = 0.0f;
 
-	for(size_t i = 0; i < targets_.size(); ++i){
-		Vector3 toTarget = targets_[i].position - ray.origin;
+	for(size_t i = 0; i < enemies_.size(); ++i){
+		Vector3 toEnemy = enemies_[i].position - ray.origin;
 
 		// レイ方向に対する射影距離。負ならカメラの後方にあるので対象外
-		float distanceAlongRay = Dot(toTarget,ray.direction);
+		float distanceAlongRay = Dot(toEnemy,ray.direction);
 		if(distanceAlongRay < 0.0f){
 			continue;
 		}
 
-		// レイ上の最近傍点と的との距離が掴める範囲に収まっているかを判定する
+		// レイ上の最近傍点と敵との距離が掴める範囲に収まっているかを判定する
 		Vector3 nearestOnRay = ray.origin + ray.direction * distanceAlongRay;
-		if(Distance(nearestOnRay,targets_[i].position) > kPickRadius){
+		if(Distance(nearestOnRay,enemies_[i].position) > kPickRadius){
 			continue;
 		}
 
-		// 複数の的が重なって見えている場合は、手前にあるものを優先する
+		// 複数の敵が重なって見えている場合は、手前にあるものを優先する
 		if(bestIndex < 0 || distanceAlongRay < bestDistanceAlongRay){
 			bestIndex = static_cast<int>(i);
 			bestDistanceAlongRay = distanceAlongRay;
@@ -249,8 +305,8 @@ int TargetEditor::PickTargetIndex(const PickRay& ray) const{
 	return bestIndex;
 }
 
-// マウスドラッグによる的の移動処理
-void TargetEditor::UpdateMouseDrag(){
+// マウスドラッグによる敵の移動処理
+void EnemyEditor::UpdateMouseDrag(){
 #ifdef USE_IMGUI
 	// 配置モードOFF、またはImGuiのウィジェットを操作中のときはドラッグ判定を行わない
 	if(!isPlacementMode_ || ImGui::IsAnyItemActive()){
@@ -268,89 +324,90 @@ void TargetEditor::UpdateMouseDrag(){
 		return;
 	}
 
-	// 左ボタンを押した瞬間、レイ上に的があれば掴む
+	// 左ボタンを押した瞬間、レイ上に敵があれば掴む
 	if(!isDragging_ && ImGui::IsMouseClicked(ImGuiMouseButton_Left)){
-		int hitIndex = PickTargetIndex(ray);
+		int hitIndex = PickEnemyIndex(ray);
 		if(hitIndex >= 0){
 			selectedIndex_ = hitIndex;
 			isDragging_ = true;
 
 			// 掴んだ瞬間のレイ方向を法線とする平面上で動かす(画面に平行な移動になる)
 			dragPlaneNormal_ = ray.direction;
-			dragPlanePoint_ = targets_[hitIndex].position;
+			dragPlanePoint_ = enemies_[hitIndex].position;
 
-			// 掴んだ位置と的の座標とのずれを保持し、掴んだ瞬間に的が跳ばないようにする
+			// 掴んだ位置と敵の座標とのずれを保持し、掴んだ瞬間に敵が跳ばないようにする
 			Vector3 hitPos{};
 			if(IntersectRayPlane(ray.origin,ray.direction,dragPlanePoint_,dragPlaneNormal_,hitPos)){
-				dragOffset_ = targets_[hitIndex].position - hitPos;
+				dragOffset_ = enemies_[hitIndex].position - hitPos;
 			} else{
 				dragOffset_ = {0.0f, 0.0f, 0.0f};
 			}
 		}
 	}
 
-	// ドラッグ中は、掴んだときの平面とレイの交点へ的を移動させる
-	if(isDragging_ && selectedIndex_ >= 0 && selectedIndex_ < static_cast<int>(targets_.size())){
+	// ドラッグ中は、掴んだときの平面とレイの交点へ敵を移動させる
+	if(isDragging_ && selectedIndex_ >= 0 && selectedIndex_ < static_cast<int>(enemies_.size())){
 		Vector3 hitPos{};
 		if(IntersectRayPlane(ray.origin,ray.direction,dragPlanePoint_,dragPlaneNormal_,hitPos)){
-			targets_[selectedIndex_].position = hitPos + dragOffset_;
+			enemies_[selectedIndex_].position = hitPos + dragOffset_;
 		}
 	}
 #endif
 }
 
-// 配置されている的の個数を取得
-int TargetEditor::GetTargetCount() const{
-	return static_cast<int>(targets_.size());
+// 配置されている敵の体数を取得
+int EnemyEditor::GetEnemyCount() const{
+	return static_cast<int>(enemies_.size());
 }
 
-// 指定インデックスの的の座標を取得
-Vector3 TargetEditor::GetTargetPosition(int index) const{
-	if(index < 0 || index >= static_cast<int>(targets_.size())){
-		return {0.0f, 0.0f, 0.0f};
+// 指定インデックスの敵の配置データを取得(範囲外のときは既定値を返す)
+EnemyEditor::EnemyPoint EnemyEditor::GetEnemyPoint(int index) const{
+	if(index < 0 || index >= static_cast<int>(enemies_.size())){
+		EnemyPoint defaultPoint{};
+		defaultPoint.position = {0.0f, 0.0f, 0.0f};
+		defaultPoint.patrolDirection = kDefaultPatrolDirection;
+		defaultPoint.maxHp = kDefaultMaxHp;
+		return defaultPoint;
 	}
-	return targets_[index].position;
+	return enemies_[index];
 }
 
-// 指定インデックスの的の座標への参照を取得(Inspectorからの編集用)
-Vector3& TargetEditor::GetTargetPositionRef(int index){
-	return targets_[index].position;
-}
-
-// 選択中の的のインデックスを取得(-1は未選択)
-int TargetEditor::GetSelectedIndex() const{
+// 選択中の敵のインデックスを取得(-1は未選択)
+int EnemyEditor::GetSelectedIndex() const{
 	return selectedIndex_;
 }
 
-// 選択中の的のインデックスを設定する(-1で選択解除)
-void TargetEditor::SetSelectedIndex(int index){
-	if(index < -1 || index >= static_cast<int>(targets_.size())){
+// 選択中の敵のインデックスを設定する(-1で選択解除)
+void EnemyEditor::SetSelectedIndex(int index){
+	if(index < -1 || index >= static_cast<int>(enemies_.size())){
 		return; // 範囲外は無視
 	}
 	selectedIndex_ = index;
 }
 
 // 配置内容をJSONファイルに保存する
-void TargetEditor::SaveToJson(){
-	// ルート要素。targetsは読み込み時の簡易フォーマットチェックにも使う
+void EnemyEditor::SaveToJson(){
+	// ルート要素。enemiesは読み込み時の簡易フォーマットチェックにも使う
 	nlohmann::json root;
 
-	nlohmann::json targetsJson = nlohmann::json::array();
-	for(const auto& target : targets_){
-		nlohmann::json tj;
-		tj["position"] = {target.position.x, target.position.y, target.position.z};
-		targetsJson.push_back(tj);
+	nlohmann::json enemiesJson = nlohmann::json::array();
+	for(const auto& enemy : enemies_){
+		nlohmann::json ej;
+		ej["position"] = {enemy.position.x, enemy.position.y, enemy.position.z};
+		ej["patrolDirection"] = {enemy.patrolDirection.x, enemy.patrolDirection.y, enemy.patrolDirection.z};
+		ej["maxHp"] = enemy.maxHp;
+		enemiesJson.push_back(ej);
 	}
-	root["targets"] = targetsJson;
+	root["enemies"] = enemiesJson;
 
 	// 保存先フォルダが無ければ作成しておく
-	std::filesystem::path savePath(kTargetSaveFilePath);
+	std::filesystem::path savePath(kEnemySaveFilePath);
 	if(savePath.has_parent_path()){
 		std::filesystem::create_directories(savePath.parent_path());
 	}
 
 	// ファイルへ書き出し(setwで人が読める整形出力にする)
-	std::ofstream file(kTargetSaveFilePath);
+	std::ofstream file(kEnemySaveFilePath);
 	if(!file.is_open()){
 		return;
 	}
@@ -358,8 +415,8 @@ void TargetEditor::SaveToJson(){
 }
 
 // 配置内容をJSONファイルから読み込む(ファイルが無ければ何もしない)
-void TargetEditor::LoadFromJson(){
-	std::ifstream file(kTargetSaveFilePath);
+void EnemyEditor::LoadFromJson(){
+	std::ifstream file(kEnemySaveFilePath);
 	if(!file.is_open()){
 		// ファイルがまだ無い(初回起動など)ときは現状維持
 		return;
@@ -369,21 +426,39 @@ void TargetEditor::LoadFromJson(){
 	file >> root;
 
 	// 最低限のフォーマットチェック。想定外なら読み込みを中止して現状維持
-	if(!root.is_object() || !root.contains("targets") || !root["targets"].is_array()){
+	if(!root.is_object() || !root.contains("enemies") || !root["enemies"].is_array()){
 		return;
 	}
 
 	// 読み込んだ内容で配置を置き換える
-	targets_.clear();
-	for(const auto& tj : root["targets"]){
-		TargetPoint point{};
-		point.position.x = tj["position"][0].get<float>();
-		point.position.y = tj["position"][1].get<float>();
-		point.position.z = tj["position"][2].get<float>();
-		targets_.push_back(point);
+	enemies_.clear();
+	for(const auto& ej : root["enemies"]){
+		EnemyPoint point{};
+		point.position.x = ej["position"][0].get<float>();
+		point.position.y = ej["position"][1].get<float>();
+		point.position.z = ej["position"][2].get<float>();
+
+		// 往復方向と体力は、古い保存データに項目が無くても読めるよう既定値で補う
+		if(ej.contains("patrolDirection") && ej["patrolDirection"].is_array()){
+			point.patrolDirection.x = ej["patrolDirection"][0].get<float>();
+			point.patrolDirection.y = ej["patrolDirection"][1].get<float>();
+			point.patrolDirection.z = ej["patrolDirection"][2].get<float>();
+		} else{
+			point.patrolDirection = kDefaultPatrolDirection;
+		}
+		if(Length(point.patrolDirection) < kMinPatrolDirectionLength){
+			point.patrolDirection = kDefaultPatrolDirection;
+		}
+
+		point.maxHp = ej.contains("maxHp")?ej["maxHp"].get<int>():kDefaultMaxHp;
+		if(point.maxHp < kMinMaxHp){
+			point.maxHp = kMinMaxHp;
+		}
+
+		enemies_.push_back(point);
 	}
 
-	// 読み込みで的の個数が変わるため、選択とドラッグ状態は解除する
+	// 読み込みで敵の体数が変わるため、選択とドラッグ状態は解除する
 	selectedIndex_ = -1;
 	isDragging_ = false;
 }

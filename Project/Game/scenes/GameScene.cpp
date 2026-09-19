@@ -26,6 +26,9 @@
 #include "Editor/RailEditor.h"
 // 的の配置エディター
 #include "Editor/TargetEditor.h"
+// ここから追加: 敵の配置エディター
+#include "Editor/EnemyEditor.h"
+// ここまで追加
 // 雑魚敵
 #include "objects/Enemy.h"
 
@@ -158,20 +161,27 @@ void GameScene::Initialize(Obj3dCommon* object3dCommon,Input* input,SpriteCommon
 	// 配置エディターの内容をシーンの的リストへ反映する
 	SyncTargetsFromEditor();
 
-	// ここから追加: 雑魚敵の生成
+	// ここから追加: 敵の配置エディターの生成と初期化(保存済みJSONがあればここで読み込まれる)
+	enemyEditor_ = std::make_unique<EnemyEditor>();
+	enemyEditor_->Initialize();
+
+	// 保存済みの配置が無い初回起動時のみ、従来どおりレール中間地点への自動配置で初期データを作る
 	// レールの中間地点の少し上に置き、レールに対して直角な方向へ往復させる
-	enemy_ = std::make_unique<Enemy>();
-	if(railEditor_){
+	if(railEditor_ && enemyEditor_->GetEnemyCount() == 0){
 		constexpr Vector3 kEnemyWorldUp = {0.0f, 1.0f, 0.0f};
 
 		Vector3 enemyBasePos = railEditor_->GetPositionOnRail(kEnemySpawnRailT_);
 		Vector3 enemyRailForward = railEditor_->GetForwardOnRail(kEnemySpawnRailT_);
 		Vector3 enemyPatrolDir = Normalize(Cross(kEnemyWorldUp,enemyRailForward));
 
-		enemy_->Initialize(object3dCommon_,enemyBasePos + kEnemyWorldUp * kEnemyUpOffset_,enemyPatrolDir);
-	} else{
-		enemy_->Initialize(object3dCommon_,{0.0f, 0.0f, 0.0f},{1.0f, 0.0f, 0.0f});
+		enemyEditor_->AddEnemyAt(enemyBasePos + kEnemyWorldUp * kEnemyUpOffset_,enemyPatrolDir,EnemyEditor::kDefaultMaxHp);
+
+		// 自動配置直後は何も選択していない状態にしておく
+		enemyEditor_->SetSelectedIndex(-1);
 	}
+
+	// 配置エディターの内容をシーンの敵リストへ反映する
+	SyncEnemiesFromEditor();
 	// ここまで追加
 
 	// 画面中央固定のレティクルを生成(外枠+中心ドットの2枚構成)
@@ -235,6 +245,39 @@ void GameScene::SyncTargetsFromEditor(){
 }
 // ここまで追加
 
+// ここから追加: 敵の配置エディターの内容をシーンの敵リストに反映する
+// 的と同じく、体数が変わったときだけ敵の実体を生成・削除し、毎フレームの生成を避ける
+void GameScene::SyncEnemiesFromEditor(){
+	if(!enemyEditor_){
+		return;
+	}
+
+	size_t editorCount = static_cast<size_t>(enemyEditor_->GetEnemyCount());
+
+	// 足りない分の敵を生成する(生成時のみモデル・弾の初期化を行う)
+	while(enemies_.size() < editorCount){
+		EnemyEditor::EnemyPoint point = enemyEditor_->GetEnemyPoint(static_cast<int>(enemies_.size()));
+
+		auto enemy = std::make_unique<Enemy>();
+		enemy->Initialize(object3dCommon_,point.position,point.patrolDirection,point.maxHp);
+		enemies_.push_back(std::move(enemy));
+	}
+
+	// 多すぎる分の敵を末尾から削除する
+	while(enemies_.size() > editorCount){
+		enemies_.pop_back();
+	}
+
+	// 座標・往復方向・体力をエディターの配置内容で上書きする
+	for(size_t i = 0; i < enemies_.size(); ++i){
+		EnemyEditor::EnemyPoint point = enemyEditor_->GetEnemyPoint(static_cast<int>(i));
+		enemies_[i]->SetBasePosition(point.position);
+		enemies_[i]->SetPatrolDirection(point.patrolDirection);
+		enemies_[i]->SetMaxHp(point.maxHp);
+	}
+}
+// ここまで追加
+
 // シーンの更新処理
 void GameScene::Update(){
 	// スカイボックスの更新
@@ -261,6 +304,14 @@ void GameScene::Update(){
 		targetEditor_->Update();
 		// 編集結果(追加・削除・ドラッグ移動)をシーンの的リストへ反映する
 		SyncTargetsFromEditor();
+	}
+	// ここまで追加
+
+	// ここから追加: 敵の配置エディターの更新(配置モード中のドラッグ移動もここで処理される)
+	if(enemyEditor_){
+		enemyEditor_->Update();
+		// 編集結果(追加・削除・ドラッグ移動・パラメータ変更)をシーンの敵リストへ反映する
+		SyncEnemiesFromEditor();
 	}
 	// ここまで追加
 
@@ -308,9 +359,9 @@ void GameScene::Update(){
 			freeVelocityY_ = 0.0f;
 			// ここまで追加
 
-			// ここから追加: 雑魚敵も撃破前の初期状態から始める
-			if(enemy_){
-				enemy_->Reset();
+			// ここから追加: 雑魚敵も撃破前の初期状態(体力満タン)から始める
+			for(auto& enemy : enemies_){
+				enemy->Reset();
 			}
 			// ここまで追加
 
@@ -481,13 +532,28 @@ void GameScene::Update(){
 			}
 			ImGui::Text("Jump Key: LSHIFT");
 			// ここまで追加
-			// ここから追加: 雑魚敵のデバッグ表示
-			if(enemy_){
-				ImGui::Text("Enemy Alive: %s",enemy_->IsAlive()?"true":"false");
-				ImGui::Text("Enemy Detecting Player: %s",enemy_->IsDetectingPlayer()?"true":"false");
-				// ここから追加: 敵弾の発射状況
-				ImGui::Text("Enemy Bullets: %d",enemy_->GetActiveBulletCount());
-				// ここまで追加
+			// ここから追加: 雑魚敵のデバッグ表示(配置エディターで複数体置けるため、体ごとに体力も表示する)
+			{
+				// 生存数と敵弾の総数は、体ごとの表示と同じループでまとめて数える
+				int aliveEnemyCount = 0;
+				int enemyBulletCount = 0;
+				for(const auto& enemy : enemies_){
+					if(enemy->IsAlive()){
+						++aliveEnemyCount;
+					}
+					enemyBulletCount += enemy->GetActiveBulletCount();
+				}
+
+				ImGui::Text("Enemies: %d (Alive %d)",static_cast<int>(enemies_.size()),aliveEnemyCount);
+				ImGui::Text("Enemy Bullets: %d",enemyBulletCount);
+
+				for(size_t i = 0; i < enemies_.size(); ++i){
+					ImGui::Text("Enemy %d HP: %d / %d  Detecting: %s",
+						static_cast<int>(i),
+						enemies_[i]->GetHp(),
+						enemies_[i]->GetMaxHp(),
+						enemies_[i]->IsDetectingPlayer()?"true":"false");
+				}
 			}
 			// ここまで追加
 			// ここから追加: プレイヤーの体力・無敵時間のデバッグ表示
@@ -528,14 +594,14 @@ void GameScene::Update(){
 		// ここから追加: 雑魚敵の更新
 		// 固定パターンでの往復移動とプレイヤー検知による向きの変更を行う
 		// Edit中はゲームを静止させるため、経過時間を0にして表示更新のみ行わせる
-		if(enemy_){
-			enemy_->Update(playerPos,isPlayMode?deltaTime:0.0f);
+		for(auto& enemy : enemies_){
+			enemy->Update(playerPos,isPlayMode?deltaTime:0.0f);
 		}
 		// ここまで追加
 
 		// ここから追加: 敵弾とプレイヤーの当たり判定
 		// Playモード中のみ判定する。連続被弾で一瞬に体力が尽きないよう、被弾後は一定時間無敵にする
-		if(isPlayMode && enemy_){
+		if(isPlayMode){
 			// 無敵時間の経過を進める
 			if(playerInvincibleTimer_ > 0.0f){
 				playerInvincibleTimer_ -= deltaTime;
@@ -545,7 +611,12 @@ void GameScene::Update(){
 			}
 
 			// 命中した弾は無敵中でもここで消滅させ、すり抜けて後から当たらないようにする
-			int hitCount = enemy_->CheckHitToPlayer(playerPos,kPlayerHitRadius_);
+			// 複数の敵が同時に撃っていても、当たった弾はすべて消すためここでは合計だけ数える
+			int hitCount = 0;
+			for(auto& enemy : enemies_){
+				hitCount += enemy->CheckHitToPlayer(playerPos,kPlayerHitRadius_);
+			}
+
 			if(hitCount > 0 && playerInvincibleTimer_ <= 0.0f && playerHp_ > 0){
 				// 同時に複数当たっても体力の減少は1回分だけにする
 				--playerHp_;
@@ -554,6 +625,13 @@ void GameScene::Update(){
 				// 被弾位置に火花パーティクルを発生させ、当たったことを見た目で分かるようにする
 				ParticleManager::GetInstance()->EmitSpark(playerPos);
 			}
+		}
+		// ここまで追加
+
+		// ここから追加: ゲームオーバー判定
+		// 体力が0になったらゲームオーバー画面へ遷移する
+		if(isPlayMode && playerHp_ <= 0){
+			sceneManager_->ChangeScene("GAMEOVER");
 		}
 		// ここまで追加
 
@@ -672,15 +750,18 @@ void GameScene::Update(){
 			}
 		}
 
-		// ここから追加: 雑魚敵の撃破判定
+		// ここから追加: 雑魚敵への被弾判定
 		// 的と同じく、生存している弾との中心間距離が敵の当たり半径以下ならヒットとする
-		if(enemy_ && enemy_->IsAlive()){
+		// 敵には体力があるため、1発で撃破せず体力を減らし、0になったときだけ撃破される
+		for(auto& enemy : enemies_){
+			if(!enemy->IsAlive()) continue;
+
 			for(auto& bullet : bullets_){
 				if(!bullet.isAlive) continue;
-				if(Length(enemy_->GetPosition() - bullet.position) <= enemy_->GetHitRadius()){
-					// 撃破位置に火花パーティクルを発生させてから撃破状態にする
-					ParticleManager::GetInstance()->EmitSpark(enemy_->GetPosition());
-					enemy_->Kill();
+				if(Length(enemy->GetPosition() - bullet.position) <= enemy->GetHitRadius()){
+					// 被弾位置に火花パーティクルを発生させ、当たったことを見た目で分かるようにする
+					ParticleManager::GetInstance()->EmitSpark(enemy->GetPosition());
+					enemy->TakeDamage(kBulletDamageToEnemy_);
 					bullet.isAlive = false;
 					break;
 				}
@@ -885,8 +966,8 @@ void GameScene::Draw(){
 	}
 
 	// ここから追加: 雑魚敵を描画(撃破済みのときはEnemy側で描画をスキップする)
-	if(enemy_){
-		enemy_->Draw();
+	for(auto& enemy : enemies_){
+		enemy->Draw();
 	}
 	// ここまで追加
 
